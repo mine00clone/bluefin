@@ -1,0 +1,9 @@
+[include]
+app = "../app.toml"
+profile = "../profiles/staging.toml"
+markets_snapshot = "../markets/snapshot.json"
+plan = "../plans/plan_paper.toml"
+
+[mode]
+trading = "Paper"
+requires_env = "ALLOW_LIVE_TRADING=YES"

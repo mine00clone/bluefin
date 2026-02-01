@@ -1,0 +1,11 @@
+[env]
+name = "staging"
+
+[rest]
+exchange_url = "https://api.sui-staging.bluefin.io/v1"
+trade_url = "https://trade.api.sui-staging.bluefin.io"
+auth_url = "https://auth.api.sui-staging.bluefin.io"
+
+[ws]
+market_url = "wss://stream.api.sui-staging.bluefin.io/ws/market"
+account_url = "wss://stream.api.sui-staging.bluefin.io/ws/account"

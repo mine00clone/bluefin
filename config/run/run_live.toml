@@ -1,0 +1,9 @@
+[include]
+app = "../app.toml"
+profile = "../profiles/prod.toml"
+markets_snapshot = "../markets/snapshot.json"
+plan = "../plans/plan_live.toml"
+
+[mode]
+trading = "Live"
+requires_env = "ALLOW_LIVE_TRADING=YES"

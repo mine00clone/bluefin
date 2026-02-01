@@ -1,0 +1,15 @@
+# Phase 1 minimal plan for paper/dry runs
+
+[[orders]]
+id = "btc_entry_1"
+market = "BTC-PERP"
+side = "buy"
+order_type = "limit"
+price_mode = "offset_bps"
+price_bps = "-300"
+size_mode = "quantity"
+quantity = "1000000" # e9 (0.001 BTC)
+tif = "GTC"
+post_only = true
+reduce_only = false
+cancel_after_ms = 15000

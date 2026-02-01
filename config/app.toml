@@ -1,0 +1,27 @@
+# App-wide defaults (non-env-specific)
+
+[paths]
+# SQLite database path (relative to repo root)
+db_path = "data/bluefin.db"
+# Raw response dump path
+raw_path = "data/raw"
+
+[logging]
+level = "info"
+json = false
+
+[execution]
+# Live | Paper | DryRun (default)
+mode = "DryRun"
+# If set, required env var (e.g. ALLOW_LIVE_TRADING=YES) must match
+requires_env = "ALLOW_LIVE_TRADING=YES"
+
+[normalization]
+# price/size: snap | reject
+price_policy = "snap"
+size_policy = "snap"
+# rounding: down | up | nearest
+price_rounding = "nearest"
+size_rounding = "down"
+# max allowed deviation after snap (bps as string)
+max_deviation_bps = "5"

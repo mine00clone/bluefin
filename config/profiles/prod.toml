@@ -1,0 +1,11 @@
+[env]
+name = "prod"
+
+[rest]
+exchange_url = "https://api.sui-prod.bluefin.io/v1"
+trade_url = "https://trade.api.sui-prod.bluefin.io"
+auth_url = "https://auth.api.sui-prod.bluefin.io"
+
+[ws]
+market_url = "wss://stream.api.sui-prod.bluefin.io/ws/market"
+account_url = "wss://stream.api.sui-prod.bluefin.io/ws/account"

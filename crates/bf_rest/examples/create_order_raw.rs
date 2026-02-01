@@ -83,7 +83,8 @@ async fn main() -> anyhow::Result<()> {
     // Load .env for secrets
     dotenvy::dotenv().ok();
     let use_test_keys = std::env::var("BLUEFIN_USE_TEST_KEYS").ok().as_deref() == Some("1");
-    let (private_key_hex, account_address) = if use_test_keys && environment == Environment::Staging {
+    let is_staging = matches!(environment, Environment::Staging);
+    let (private_key_hex, account_address) = if use_test_keys && is_staging {
         let test_keys = environment
             .test_keys()
             .expect("Test keys not available for this environment");
@@ -145,7 +146,9 @@ async fn main() -> anyhow::Result<()> {
         ..Configuration::new()
     };
 
-    let contracts_config = exchange::info::contracts_config(environment).await?;
+    let contracts_config = exchange::info::contracts_config(environment)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
     let signed_fields = CreateOrderRequestSignedFields {
         symbol: market.clone(),

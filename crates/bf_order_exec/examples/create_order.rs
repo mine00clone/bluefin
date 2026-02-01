@@ -27,7 +27,8 @@ async fn main() -> anyhow::Result<()> {
     let environment = to_sdk_env(&config.env.name);
 
     // Prefer test keys on staging; otherwise use .env secrets
-    let token_manager = if environment == BluefinEnvironment::Staging {
+    let is_staging = matches!(environment, BluefinEnvironment::Staging);
+    let token_manager = if is_staging {
         Arc::new(TokenManager::with_test_keys(environment)?)
     } else {
         let secrets = AppConfig::load_secrets()?;

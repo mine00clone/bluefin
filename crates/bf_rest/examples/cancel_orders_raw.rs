@@ -27,14 +27,14 @@ fn to_sdk_env(env: &BfEnvironment) -> Environment {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    println!("=== Bluefin Cancel Orders Raw ===\n");
+    println!("=== Bluefin Cancel Orders Raw\n");
 
+    let config = AppConfig::load("config")?;
     if !config.orders.allow_trading {
         println!("orders.allow_trading is false. Enable it in config/default.toml to place orders.");
         return Ok(());
     }
 
-    let config = AppConfig::load("config")?;
     let environment = to_sdk_env(&config.env.name);
 
     // Load .env for secrets

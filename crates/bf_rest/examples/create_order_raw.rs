@@ -90,14 +90,14 @@ fn snap_to_step(value_e9: u64, step_e9: u64) -> u64 {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    println!("=== Bluefin Create Order Raw ===\n");
+    println!("=== Bluefin Create Order Raw\n");
 
+    let config = AppConfig::load("config")?;
     if !config.orders.allow_trading {
         println!("orders.allow_trading is false. Enable it in config/default.toml to place orders.");
         return Ok(());
     }
 
-    let config = AppConfig::load("config")?;
     let environment = to_sdk_env(&config.env.name);
 
     // Load .env for secrets

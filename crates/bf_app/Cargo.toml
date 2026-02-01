@@ -1,0 +1,31 @@
+[package]
+name = "bf_app"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Main application binary for Bluefin trading bot"
+
+[[bin]]
+name = "bluefin-bot"
+path = "src/main.rs"
+
+[dependencies]
+bf_config = { workspace = true }
+bf_core = { workspace = true }
+bf_auth = { workspace = true }
+bf_rest = { workspace = true }
+bf_ws = { workspace = true }
+bf_balance = { workspace = true }
+bf_order_exec = { workspace = true }
+bf_order_manager = { workspace = true }
+bf_history = { workspace = true }
+bf_storage_sqlite = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

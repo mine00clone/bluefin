@@ -1,0 +1,15 @@
+[package]
+name = "bf_config"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Configuration management for Bluefin trading bot"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+config = { workspace = true }
+dotenvy = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

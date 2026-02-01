@@ -1,0 +1,21 @@
+[package]
+name = "bf_balance"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Balance management for Bluefin trading bot"
+
+[dependencies]
+bf_config = { workspace = true }
+bf_core = { workspace = true }
+bf_rest = { workspace = true }
+bf_ws = { workspace = true }
+bf_storage_sqlite = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+rust_decimal = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

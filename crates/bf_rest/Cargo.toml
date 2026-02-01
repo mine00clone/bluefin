@@ -1,0 +1,53 @@
+[package]
+name = "bf_rest"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "REST API client for Bluefin exchange"
+
+[dependencies]
+bf_config = { workspace = true }
+bf_core = { workspace = true }
+bf_auth = { workspace = true }
+bluefin-pro = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+bluefin_api = { workspace = true }
+hex = "0.4"
+sui-sdk-types = "0.0.4"
+dotenvy = { workspace = true }
+rand = "0.8"
+rust_decimal = { workspace = true }
+
+[[example]]
+name = "public_read"
+path = "examples/public_read.rs"
+
+[[example]]
+name = "private_read"
+path = "examples/private_read.rs"
+
+[[example]]
+name = "open_orders_raw"
+path = "examples/open_orders_raw.rs"
+
+[[example]]
+name = "account_details_raw"
+path = "examples/account_details_raw.rs"
+
+[[example]]
+name = "create_order_raw"
+path = "examples/create_order_raw.rs"
+
+[[example]]
+name = "cancel_orders_raw"
+path = "examples/cancel_orders_raw.rs"

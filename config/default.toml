@@ -1,0 +1,39 @@
+# Bluefin Trading Bot Configuration
+# This file contains all non-secret configuration.
+# Secrets (API keys, private keys) go in .env
+
+[env]
+# Environment: "staging" or "prod"
+name = "staging"
+
+[rest]
+# REST API base URLs
+# Format: https://api.{env}.bluefin.io/v1 (exchange data)
+#         https://trade.api.{env}.bluefin.io (trading)
+#         https://auth.api.{env}.bluefin.io (authentication)
+# env = "sui-staging" or "sui-prod"
+
+# Exchange data API (public)
+exchange_url = "https://api.sui-staging.bluefin.io/v1"
+# Trading API (authenticated)
+trade_url = "https://trade.api.sui-staging.bluefin.io"
+# Auth API
+auth_url = "https://auth.api.sui-staging.bluefin.io"
+
+[ws]
+# WebSocket URLs
+# Market stream for order book, trades, tickers
+market_url = "wss://stream.api.sui-staging.bluefin.io/ws/market"
+# Account stream for order updates, positions, balances
+account_url = "wss://stream.api.sui-staging.bluefin.io/ws/account"
+
+[markets]
+# Trading pairs to monitor/trade
+# Add or remove symbols as needed
+symbols = ["BTC-PERP", "ETH-PERP"]
+
+[storage]
+# SQLite database path (relative to project root)
+db_path = "data/bluefin.db"
+# Raw response dump path
+raw_path = "data/raw"

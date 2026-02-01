@@ -1,0 +1,22 @@
+# Build artifacts
+/target/
+
+# Environment variables (secrets)
+.env
+
+# Data directory (SQLite, raw dumps)
+/data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Rust
+**/*.rs.bk
+Cargo.lock

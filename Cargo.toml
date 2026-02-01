@@ -1,0 +1,74 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/bf_config",
+    "crates/bf_core",
+    "crates/bf_auth",
+    "crates/bf_rest",
+    "crates/bf_ws",
+    "crates/bf_balance",
+    "crates/bf_order_exec",
+    "crates/bf_order_manager",
+    "crates/bf_history",
+    "crates/bf_storage_sqlite",
+    "crates/bf_app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Bluefin Bot Team"]
+license = "MIT"
+
+[workspace.dependencies]
+# Bluefin SDK
+bluefin-pro = "1.5"
+bluefin_api = "1.5"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# WebSocket with TLS
+tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
+futures-util = "0.3"
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
+
+# Logging/Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Configuration
+config = "0.14"
+dotenvy = "0.15"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Utilities
+uuid = { version = "1", features = ["v4", "serde"] }
+rust_decimal = { version = "1", features = ["serde"] }
+
+# Internal crates
+bf_config = { path = "crates/bf_config" }
+bf_core = { path = "crates/bf_core" }
+bf_auth = { path = "crates/bf_auth" }
+bf_rest = { path = "crates/bf_rest" }
+bf_ws = { path = "crates/bf_ws" }
+bf_balance = { path = "crates/bf_balance" }
+bf_order_exec = { path = "crates/bf_order_exec" }
+bf_order_manager = { path = "crates/bf_order_manager" }
+bf_history = { path = "crates/bf_history" }
+bf_storage_sqlite = { path = "crates/bf_storage_sqlite" }

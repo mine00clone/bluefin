@@ -1,0 +1,30 @@
+[package]
+name = "bf_auth"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Authentication and token management for Bluefin API"
+
+[dependencies]
+bf_config = { workspace = true }
+bf_core = { workspace = true }
+bluefin-pro = { workspace = true }
+bluefin_api = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+dotenvy = { workspace = true }
+hex = "0.4"
+sui-sdk-types = "0.0.4"
+
+[dev-dependencies]
+anyhow = { workspace = true }
+
+[[example]]
+name = "get_token"
+path = "examples/get_token.rs"

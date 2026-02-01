@@ -7,7 +7,9 @@
 //!   BLUEFIN_ALLOW_TRADING=1 cargo run --example create_order_raw -p bf_rest
 
 use bf_config::{AppConfig, Environment as BfEnvironment};
-use bluefin_api::apis::{configuration::Configuration, trade_api::post_create_order};
+use bluefin_api::apis::{
+    configuration::Configuration, exchange_api::get_market_ticker, trade_api::post_create_order,
+};
 use bluefin_api::models::{
     CreateOrderRequest, CreateOrderRequestSignedFields, LoginRequest, OrderSide,
     OrderTimeInForce, OrderType as SdkOrderType, SelfTradePreventionType,
@@ -20,6 +22,7 @@ use rust_decimal::Decimal;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
+use std::str::FromStr;
 use sui_sdk_types::SignatureScheme;
 
 const E9: u64 = 1_000_000_000;
@@ -40,12 +43,6 @@ fn parse_decimal(var_name: &str, default: &str) -> anyhow::Result<Decimal> {
     let raw = std::env::var(var_name).unwrap_or_else(|_| default.to_string());
     raw.parse::<Decimal>()
         .map_err(|e| anyhow::anyhow!("Invalid {}: {}", var_name, e))
-}
-
-fn env_bool(var_name: &str) -> Option<bool> {
-    std::env::var(var_name).ok().map(|raw| {
-        raw == "1" || raw.eq_ignore_ascii_case("true") || raw.eq_ignore_ascii_case("yes")
-    })
 }
 
 fn parse_stp(raw: &str) -> anyhow::Result<SelfTradePreventionType> {
@@ -84,12 +81,6 @@ fn parse_tif(raw: &str) -> anyhow::Result<OrderTimeInForce> {
     }
 }
 
-fn parse_u64_env(var_name: &str) -> Option<u64> {
-    std::env::var(var_name)
-        .ok()
-        .and_then(|raw| raw.parse::<u64>().ok())
-}
-
 fn snap_to_step(value_e9: u64, step_e9: u64) -> u64 {
     if step_e9 == 0 {
         return value_e9;
@@ -101,8 +92,8 @@ fn snap_to_step(value_e9: u64, step_e9: u64) -> u64 {
 async fn main() -> anyhow::Result<()> {
     println!("=== Bluefin Create Order Raw ===\n");
 
-    if std::env::var("BLUEFIN_ALLOW_TRADING").ok().as_deref() != Some("1") {
-        println!("Set BLUEFIN_ALLOW_TRADING=1 to allow order creation.");
+    if !config.orders.allow_trading {
+        println!("orders.allow_trading is false. Enable it in config/default.toml to place orders.");
         return Ok(());
     }
 
@@ -132,24 +123,25 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let market = std::env::var("BLUEFIN_ORDER_MARKET")
-        .ok()
-        .or_else(|| config.markets.symbols.first().cloned())
-        .unwrap_or_else(|| "BTC-PERP".to_string());
-    let side = parse_side(&std::env::var("BLUEFIN_ORDER_SIDE").unwrap_or_else(|_| "BUY".into()))?;
-    let order_type = parse_order_type(&std::env::var("BLUEFIN_ORDER_TYPE").unwrap_or_else(|_| "LIMIT".into()))?;
-    let size = parse_decimal("BLUEFIN_ORDER_SIZE", "1")?;
-    let tif = parse_tif(&std::env::var("BLUEFIN_ORDER_TIF").unwrap_or_else(|_| "GTC".into()))?;
-    let price = if matches!(order_type, SdkOrderType::Limit) {
-        Some(parse_decimal("BLUEFIN_ORDER_PRICE", "0")?)
+    let market = if config.orders.create.market.trim().is_empty() {
+        config
+            .markets
+            .symbols
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "BTC-PERP".to_string())
     } else {
-        None
+        config.orders.create.market.clone()
     };
+    let side = parse_side(&config.orders.create.side)?;
+    let order_type = parse_order_type(&config.orders.create.order_type)?;
+    let size = Decimal::from_str_exact(&config.orders.create.size)?;
+    let tif = parse_tif(&config.orders.create.time_in_force)?;
 
-    if matches!(order_type, SdkOrderType::Limit) && price.as_ref().map(|p| p.is_zero()).unwrap_or(true) {
-        println!("LIMIT order requires BLUEFIN_ORDER_PRICE > 0");
-        return Ok(());
-    }
+    let exchange_config = Configuration {
+        base_path: config.rest.exchange_url.clone(),
+        ..Configuration::new()
+    };
 
     println!("Account: {}", account_address);
     println!("Environment: {:?}", config.env.name);
@@ -191,6 +183,30 @@ async fn main() -> anyhow::Result<()> {
     let step_size_e9: u64 = market_info.step_size_e9.parse().unwrap_or(0);
     let min_order_qty_e9: u64 = market_info.min_order_quantity_e9.parse().unwrap_or(0);
 
+    let ticker = get_market_ticker(&exchange_config, &market)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let last_price_e9: u64 = ticker.last_price_e9.parse().unwrap_or(0);
+    let signed_at_millis = ticker.updated_at_millis as u64;
+    let expires_at_millis = signed_at_millis + 6 * 60 * 1000;
+
+    let price = if matches!(order_type, SdkOrderType::Limit) {
+        if let Some(override_price) = &config.orders.create.price_override {
+            Some(Decimal::from_str_exact(override_price)?)
+        } else {
+            let last_price = Decimal::from(last_price_e9) / Decimal::from(E9);
+            let bps = Decimal::from(config.orders.create.price_offset_bps);
+            let factor = Decimal::ONE + (bps / Decimal::from(10_000));
+            Some(last_price * factor)
+        }
+    } else {
+        None
+    };
+
+    if matches!(order_type, SdkOrderType::Limit) && price.as_ref().map(|p| p.is_zero()).unwrap_or(true) {
+        return Err(anyhow::anyhow!("LIMIT order requires non-zero price"));
+    }
+
     let mut price_e9_u64 = price
         .map(decimal_to_e9)
         .unwrap_or_else(|| "0".to_string())
@@ -213,15 +229,7 @@ async fn main() -> anyhow::Result<()> {
         ));
     }
 
-    let signed_at_millis = parse_u64_env("BLUEFIN_SIGNED_AT_MILLIS")
-        .unwrap_or_else(|| Utc::now().timestamp_millis() as u64);
-    let expires_at_millis = parse_u64_env("BLUEFIN_EXPIRES_AT_MILLIS")
-        .unwrap_or(signed_at_millis + 6 * 60 * 1000);
-
-    let leverage = std::env::var("BLUEFIN_ORDER_LEVERAGE")
-        .ok()
-        .and_then(|raw| raw.parse::<u32>().ok())
-        .unwrap_or(config.orders.default_leverage);
+    let leverage = config.orders.default_leverage;
 
     let signed_fields = CreateOrderRequestSignedFields {
         symbol: market.clone(),
@@ -237,11 +245,9 @@ async fn main() -> anyhow::Result<()> {
         signed_at_millis: signed_at_millis as i64,
     };
 
-    let post_only = env_bool("BLUEFIN_ORDER_POST_ONLY").unwrap_or(config.orders.post_only);
-    let reduce_only = env_bool("BLUEFIN_ORDER_REDUCE_ONLY").unwrap_or(config.orders.reduce_only);
-    let stp_raw = std::env::var("BLUEFIN_SELF_TRADE_PREVENTION_TYPE")
-        .ok()
-        .unwrap_or_else(|| config.orders.self_trade_prevention_type.clone());
+    let post_only = config.orders.post_only;
+    let reduce_only = config.orders.reduce_only;
+    let stp_raw = config.orders.self_trade_prevention_type.clone();
     let stp = parse_stp(&stp_raw)?;
 
     let order_request = CreateOrderRequest {

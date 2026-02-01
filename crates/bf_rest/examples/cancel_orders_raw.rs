@@ -29,8 +29,8 @@ fn to_sdk_env(env: &BfEnvironment) -> Environment {
 async fn main() -> anyhow::Result<()> {
     println!("=== Bluefin Cancel Orders Raw ===\n");
 
-    if std::env::var("BLUEFIN_ALLOW_TRADING").ok().as_deref() != Some("1") {
-        println!("Set BLUEFIN_ALLOW_TRADING=1 to allow order cancellation.");
+    if !config.orders.allow_trading {
+        println!("orders.allow_trading is false. Enable it in config/default.toml to place orders.");
         return Ok(());
     }
 
@@ -51,25 +51,26 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let market = std::env::var("BLUEFIN_CANCEL_MARKET")
-        .ok()
-        .or_else(|| config.markets.symbols.first().cloned())
-        .unwrap_or_else(|| "BTC-PERP".to_string());
+    let market = if config.orders.cancel.market.trim().is_empty() {
+        config
+            .markets
+            .symbols
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "BTC-PERP".to_string())
+    } else {
+        config.orders.cancel.market.clone()
+    };
 
-    let order_hashes = std::env::var("BLUEFIN_CANCEL_ORDER_HASHES")
-        .ok()
-        .and_then(|raw| {
-            let hashes: Vec<String> = raw
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect();
-            if hashes.is_empty() { None } else { Some(hashes) }
-        });
+    let order_hashes = if config.orders.cancel.order_hashes.is_empty() {
+        None
+    } else {
+        Some(config.orders.cancel.order_hashes.clone())
+    };
 
-    let cancel_all = std::env::var("BLUEFIN_CANCEL_ALL").ok().as_deref() == Some("1");
+    let cancel_all = config.orders.cancel.cancel_all;
     if order_hashes.is_none() && !cancel_all {
-        println!("Provide BLUEFIN_CANCEL_ORDER_HASHES or set BLUEFIN_CANCEL_ALL=1");
+        println!("orders.cancel.order_hashes is empty and cancel_all is false.");
         return Ok(());
     }
 

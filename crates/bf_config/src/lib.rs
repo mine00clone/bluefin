@@ -67,10 +67,33 @@ pub struct StorageConfig {
 /// Order defaults configuration
 #[derive(Debug, Clone, Deserialize)]
 pub struct OrdersConfig {
+    pub allow_trading: bool,
     pub default_leverage: u32,
     pub post_only: bool,
     pub reduce_only: bool,
     pub self_trade_prevention_type: String,
+    pub create: OrdersCreateConfig,
+    pub cancel: OrdersCancelConfig,
+}
+
+/// Order creation parameters for raw create script
+#[derive(Debug, Clone, Deserialize)]
+pub struct OrdersCreateConfig {
+    pub market: String,
+    pub side: String,
+    pub order_type: String,
+    pub time_in_force: String,
+    pub size: String,
+    pub price_offset_bps: i64,
+    pub price_override: Option<String>,
+}
+
+/// Order cancellation parameters for raw cancel script
+#[derive(Debug, Clone, Deserialize)]
+pub struct OrdersCancelConfig {
+    pub market: String,
+    pub order_hashes: Vec<String>,
+    pub cancel_all: bool,
 }
 
 /// Sui wallet authentication secrets (from .env)

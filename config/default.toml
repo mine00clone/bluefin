@@ -39,10 +39,30 @@ db_path = "data/bluefin.db"
 raw_path = "data/raw"
 
 [orders]
+# Safety gate: must be true to place orders from raw scripts
+allow_trading = false
 # Default leverage (1-100); used by raw create order scripts
 default_leverage = 10
-# Default order flags (overridden by env vars in raw scripts)
+# Default order flags (configurable without rebuild)
 post_only = true
 reduce_only = false
 # TAKER | MAKER | BOTH | UNSPECIFIED
 self_trade_prevention_type = "MAKER"
+
+[orders.create]
+# Order parameters for raw create order script
+market = "BTC-PERP"
+side = "BUY"
+order_type = "LIMIT"
+time_in_force = "GTC"
+size = "0.001"
+# Price offset in basis points from last price (e.g., -300 = 3% below)
+price_offset_bps = -300
+# Optional absolute price override (string); when set, offset is ignored
+price_override = null
+
+[orders.cancel]
+# Cancel parameters for raw cancel script
+market = "BTC-PERP"
+order_hashes = []
+cancel_all = false

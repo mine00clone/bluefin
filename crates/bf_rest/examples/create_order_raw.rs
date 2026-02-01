@@ -42,6 +42,22 @@ fn parse_decimal(var_name: &str, default: &str) -> anyhow::Result<Decimal> {
         .map_err(|e| anyhow::anyhow!("Invalid {}: {}", var_name, e))
 }
 
+fn env_bool(var_name: &str) -> Option<bool> {
+    std::env::var(var_name).ok().map(|raw| {
+        raw == "1" || raw.eq_ignore_ascii_case("true") || raw.eq_ignore_ascii_case("yes")
+    })
+}
+
+fn parse_stp(raw: &str) -> anyhow::Result<SelfTradePreventionType> {
+    match raw.to_uppercase().as_str() {
+        "TAKER" => Ok(SelfTradePreventionType::Taker),
+        "MAKER" => Ok(SelfTradePreventionType::Maker),
+        "BOTH" => Ok(SelfTradePreventionType::Both),
+        "UNSPECIFIED" => Ok(SelfTradePreventionType::Unspecified),
+        _ => Err(anyhow::anyhow!("Invalid self_trade_prevention_type: {}", raw)),
+    }
+}
+
 fn parse_side(raw: &str) -> anyhow::Result<OrderSide> {
     match raw.to_uppercase().as_str() {
         "BUY" => Ok(OrderSide::Long),
@@ -66,6 +82,19 @@ fn parse_tif(raw: &str) -> anyhow::Result<OrderTimeInForce> {
         "FOK" => Ok(OrderTimeInForce::Fok),
         _ => Err(anyhow::anyhow!("Invalid BLUEFIN_ORDER_TIF: {}", raw)),
     }
+}
+
+fn parse_u64_env(var_name: &str) -> Option<u64> {
+    std::env::var(var_name)
+        .ok()
+        .and_then(|raw| raw.parse::<u64>().ok())
+}
+
+fn snap_to_step(value_e9: u64, step_e9: u64) -> u64 {
+    if step_e9 == 0 {
+        return value_e9;
+    }
+    (value_e9 / step_e9) * step_e9
 }
 
 #[tokio::main]
@@ -150,29 +179,80 @@ async fn main() -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
+    let markets = exchange::info::markets(environment)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let market_info = markets
+        .iter()
+        .find(|m| m.symbol == market)
+        .ok_or_else(|| anyhow::anyhow!("Market not found: {}", market))?;
+
+    let tick_size_e9: u64 = market_info.tick_size_e9.parse().unwrap_or(0);
+    let step_size_e9: u64 = market_info.step_size_e9.parse().unwrap_or(0);
+    let min_order_qty_e9: u64 = market_info.min_order_quantity_e9.parse().unwrap_or(0);
+
+    let mut price_e9_u64 = price
+        .map(decimal_to_e9)
+        .unwrap_or_else(|| "0".to_string())
+        .parse::<u64>()
+        .unwrap_or(0);
+    if matches!(order_type, SdkOrderType::Limit) {
+        price_e9_u64 = snap_to_step(price_e9_u64, tick_size_e9);
+        if price_e9_u64 == 0 {
+            return Err(anyhow::anyhow!("Price snaps to 0 (tick size too large)"));
+        }
+    }
+
+    let mut size_e9_u64 = decimal_to_e9(size).parse::<u64>().unwrap_or(0);
+    size_e9_u64 = snap_to_step(size_e9_u64, step_size_e9);
+    if size_e9_u64 < min_order_qty_e9 {
+        return Err(anyhow::anyhow!(
+            "Order size below minimum: {} < {} (e9)",
+            size_e9_u64,
+            min_order_qty_e9
+        ));
+    }
+
+    let signed_at_millis = parse_u64_env("BLUEFIN_SIGNED_AT_MILLIS")
+        .unwrap_or_else(|| Utc::now().timestamp_millis() as u64);
+    let expires_at_millis = parse_u64_env("BLUEFIN_EXPIRES_AT_MILLIS")
+        .unwrap_or(signed_at_millis + 6 * 60 * 1000);
+
+    let leverage = std::env::var("BLUEFIN_ORDER_LEVERAGE")
+        .ok()
+        .and_then(|raw| raw.parse::<u32>().ok())
+        .unwrap_or(config.orders.default_leverage);
+
     let signed_fields = CreateOrderRequestSignedFields {
         symbol: market.clone(),
         account_address: account_address.clone(),
-        price_e9: price.map(decimal_to_e9).unwrap_or_else(|| "0".to_string()),
-        quantity_e9: decimal_to_e9(size),
+        price_e9: price_e9_u64.to_string(),
+        quantity_e9: size_e9_u64.to_string(),
         side,
-        leverage_e9: (10u64 * E9).to_string(),
+        leverage_e9: ((leverage as u64) * E9).to_string(),
         is_isolated: false,
         salt: random::<u64>().to_string(),
         ids_id: contracts_config.ids_id,
-        expires_at_millis: Utc::now().timestamp_millis() + 6 * 60 * 1000,
-        signed_at_millis: Utc::now().timestamp_millis(),
+        expires_at_millis: expires_at_millis as i64,
+        signed_at_millis: signed_at_millis as i64,
     };
+
+    let post_only = env_bool("BLUEFIN_ORDER_POST_ONLY").unwrap_or(config.orders.post_only);
+    let reduce_only = env_bool("BLUEFIN_ORDER_REDUCE_ONLY").unwrap_or(config.orders.reduce_only);
+    let stp_raw = std::env::var("BLUEFIN_SELF_TRADE_PREVENTION_TYPE")
+        .ok()
+        .unwrap_or_else(|| config.orders.self_trade_prevention_type.clone());
+    let stp = parse_stp(&stp_raw)?;
 
     let order_request = CreateOrderRequest {
         signed_fields,
         client_order_id: None,
         r#type: order_type,
-        reduce_only: false,
-        post_only: Some(true),
+        reduce_only,
+        post_only: if post_only { Some(true) } else { None },
         time_in_force: Some(tif),
         trigger_price_e9: None,
-        self_trade_prevention_type: Some(SelfTradePreventionType::Maker),
+        self_trade_prevention_type: Some(stp),
         ..Default::default()
     };
 
@@ -180,19 +260,38 @@ async fn main() -> anyhow::Result<()> {
     let signed_request = order_request.sign(private_key, SignatureScheme::Ed25519)?;
 
     println!("\n--- Submitting Order ---");
-    let response = post_create_order(&trade_config, signed_request.clone()).await?;
-    println!("Order submitted: {}", response.order_hash);
+    let response = post_create_order(&trade_config, signed_request.clone()).await;
 
     let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
     let output_path = raw_dir.join(format!("create_order_{}.json", timestamp));
-    let output = serde_json::json!({
-        "request": signed_request,
-        "response": response,
-        "timestamp": Utc::now().to_rfc3339(),
-    });
+    let output = match &response {
+        Ok(ok) => serde_json::json!({
+            "request": signed_request,
+            "response": ok,
+            "timestamp": Utc::now().to_rfc3339(),
+        }),
+        Err(e) => {
+            let mut err = serde_json::json!({
+                "request": signed_request,
+                "error": e.to_string(),
+                "timestamp": Utc::now().to_rfc3339(),
+            });
+            if let bluefin_api::apis::Error::ResponseError(resp) = e {
+                err["response_status"] = serde_json::json!(resp.status.as_u16());
+                err["response_content"] = serde_json::json!(resp.content.clone());
+            }
+            err
+        }
+    };
     let mut file = File::create(&output_path)?;
     writeln!(file, "{}", serde_json::to_string_pretty(&output)?)?;
     println!("Saved to: {}", output_path.display());
 
-    Ok(())
+    match response {
+        Ok(ok) => {
+            println!("Order submitted: {}", ok.order_hash);
+            Ok(())
+        }
+        Err(e) => Err(e.into()),
+    }
 }

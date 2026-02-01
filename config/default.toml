@@ -37,3 +37,12 @@ symbols = ["BTC-PERP", "ETH-PERP"]
 db_path = "data/bluefin.db"
 # Raw response dump path
 raw_path = "data/raw"
+
+[orders]
+# Default leverage (1-100); used by raw create order scripts
+default_leverage = 10
+# Default order flags (overridden by env vars in raw scripts)
+post_only = true
+reduce_only = false
+# TAKER | MAKER | BOTH | UNSPECIFIED
+self_trade_prevention_type = "MAKER"

@@ -64,6 +64,15 @@ pub struct StorageConfig {
     pub raw_path: String,
 }
 
+/// Order defaults configuration
+#[derive(Debug, Clone, Deserialize)]
+pub struct OrdersConfig {
+    pub default_leverage: u32,
+    pub post_only: bool,
+    pub reduce_only: bool,
+    pub self_trade_prevention_type: String,
+}
+
 /// Sui wallet authentication secrets (from .env)
 #[derive(Debug, Clone)]
 pub struct AuthSecrets {
@@ -87,6 +96,7 @@ pub struct AppConfig {
     pub ws: WsConfig,
     pub markets: MarketsConfig,
     pub storage: StorageConfig,
+    pub orders: OrdersConfig,
 }
 
 impl AppConfig {

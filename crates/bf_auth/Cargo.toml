@@ -24,7 +24,12 @@ sui-sdk-types = "0.0.4"
 
 [dev-dependencies]
 anyhow = { workspace = true }
+sui-crypto = "0.0.4"
 
 [[example]]
 name = "get_token"
 path = "examples/get_token.rs"
+
+[[example]]
+name = "derive_address"
+path = "examples/derive_address.rs"

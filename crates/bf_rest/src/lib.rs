@@ -11,7 +11,7 @@ use bf_config::AppConfig;
 use bf_core::{CancelRequest, CoreError, Order, OrderRequest};
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::{debug, info};
+use tracing::debug;
 
 #[derive(Debug, Error)]
 pub enum RestError {

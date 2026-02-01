@@ -11,11 +11,10 @@ use bf_core::{AccountEvent, MarketEvent, RawWsMessage};
 use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use std::path::Path;
-use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 #[derive(Debug, Error)]
 pub enum WsError {
@@ -55,7 +54,7 @@ impl WsClient {
     /// Connect to account WebSocket stream
     pub async fn connect_account(
         &self,
-        auth_token: &str,
+        _auth_token: &str,
     ) -> Result<mpsc::Receiver<AccountEvent>, WsError> {
         let url = &self.config.ws.account_url;
         info!("Connecting to account stream: {}", url);

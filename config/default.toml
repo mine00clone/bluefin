@@ -4,7 +4,7 @@
 
 [env]
 # Environment: "staging" or "prod"
-name = "staging"
+name = "prod"
 
 [rest]
 # REST API base URLs
@@ -14,18 +14,18 @@ name = "staging"
 # env = "sui-staging" or "sui-prod"
 
 # Exchange data API (public)
-exchange_url = "https://api.sui-staging.bluefin.io/v1"
+exchange_url = "https://api.sui-prod.bluefin.io/v1"
 # Trading API (authenticated)
-trade_url = "https://trade.api.sui-staging.bluefin.io"
+trade_url = "https://trade.api.sui-prod.bluefin.io"
 # Auth API
-auth_url = "https://auth.api.sui-staging.bluefin.io"
+auth_url = "https://auth.api.sui-prod.bluefin.io"
 
 [ws]
 # WebSocket URLs
 # Market stream for order book, trades, tickers
-market_url = "wss://stream.api.sui-staging.bluefin.io/ws/market"
+market_url = "wss://stream.api.sui-prod.bluefin.io/ws/market"
 # Account stream for order updates, positions, balances
-account_url = "wss://stream.api.sui-staging.bluefin.io/ws/account"
+account_url = "wss://stream.api.sui-prod.bluefin.io/ws/account"
 
 [markets]
 # Trading pairs to monitor/trade

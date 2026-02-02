@@ -1,0 +1,6 @@
+# Example strategy config (placeholder)
+
+[strategy]
+id = "example"
+enabled = true
+

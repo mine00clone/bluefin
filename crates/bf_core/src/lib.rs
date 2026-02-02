@@ -14,6 +14,7 @@ pub mod traits;
 pub mod market_meta;
 pub mod plan;
 pub mod redact;
+pub mod intent;
 
 pub use error::CoreError;
 pub use event::*;
@@ -24,3 +25,4 @@ pub use traits::*;
 pub use market_meta::*;
 pub use plan::*;
 pub use redact::*;
+pub use intent::*;

@@ -78,6 +78,14 @@ https://bluefin-exchange.readme.io/reference/welcome-to-bluefin-pro
 
 ---
 
+## 注意点（実運用で確認された事項）
+- **SignedAtUtcMillis の制約**: サーバは `signedAtMillis` が「1分以上過去」の場合に `400 Bad Request` を返す。
+  - HTTP raw のエラーボディ例: `Invalid Payload: SignedAtUtcMillis must be no earlier than 1 minute in the past`
+  - 対策: **サーバの Date ヘッダ由来の時刻**を `signedAtMillis` に使用するか、送信直前に生成する。
+- **SelfTradePreventionType**: `MAKER` 指定が 400 になるケースがあるため、**UNSPECIFIED での送信が通ることを確認**。
+
+---
+
 ## WebSocket購読
 
 ### Market Stream (`/ws/market`)

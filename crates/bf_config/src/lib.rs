@@ -6,6 +6,9 @@
 
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
+
+mod plan_config;
+mod market_snapshot;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -194,28 +197,8 @@ pub struct ProfileConfig {
     pub ws: WsConfig,
 }
 
-/// Plan config (Phase 1 minimal)
-#[derive(Debug, Clone, Deserialize)]
-pub struct PlanConfig {
-    pub orders: Vec<PlanOrderConfig>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct PlanOrderConfig {
-    pub id: String,
-    pub market: String,
-    pub side: String,
-    pub order_type: String,
-    pub price_mode: String,
-    pub price_bps: Option<String>,
-    pub price_e9: Option<String>,
-    pub size_mode: String,
-    pub quantity: Option<String>,
-    pub tif: String,
-    pub post_only: bool,
-    pub reduce_only: bool,
-    pub cancel_after_ms: Option<u64>,
-}
+pub use plan_config::{PlanConfig, PlanOrderConfig};
+pub use market_snapshot::load_market_snapshot;
 
 /// Runtime config resolved from run.toml
 #[derive(Debug, Clone)]

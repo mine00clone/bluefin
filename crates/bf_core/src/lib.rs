@@ -11,6 +11,8 @@ pub mod order;
 pub mod balance;
 pub mod fill;
 pub mod traits;
+pub mod market_meta;
+pub mod plan;
 
 pub use error::CoreError;
 pub use event::*;
@@ -18,3 +20,5 @@ pub use order::*;
 pub use balance::*;
 pub use fill::*;
 pub use traits::*;
+pub use market_meta::*;
+pub use plan::*;

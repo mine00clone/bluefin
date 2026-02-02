@@ -85,6 +85,7 @@ https://bluefin-exchange.readme.io/reference/welcome-to-bluefin-pro
 - **SelfTradePreventionType**: `MAKER` 指定が 400 になるケースがあるため、**UNSPECIFIED での送信が通ることを確認**。
 - **openOrders のレスポンス揺れ**: `createTime` が文字列で返るケースがあり、型デシリアライズが壊れることがある。実装前に raw を保存してから型を確定する。
 - **cancelAll のレスポンス揺れ**: `CancelAllResponse { canceled_count }` ではなく、配列っぽい戻りになるケースがある。実装前に raw を保存してから型を確定する。
+- **cancelAll の HTTP 応答**: `202 Accepted` でボディが空のケースがある（HTTP raw で確認済み）。ACK と WS 確定を分離する前提で扱う。
 
 ---
 

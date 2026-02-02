@@ -12,4 +12,4 @@
 ## Checklist
 - [x] fallback_enabled が config に追加される
 - [x] false の場合は一切 fallback しない
-- [ ] true の場合のみ openOrders 等を使う（raw capture と型確定後に実装）
+- [x] true の場合のみ openOrders 等を使う

@@ -2,14 +2,17 @@
 
 use anyhow::Result;
 use bf_auth::{BluefinEnvironment, TokenManager};
-use bf_core::{ConfirmStatus, MarketEvent, OrderRequest, Strategy, StrategyContext};
+use bf_core::{AccountEvent, ConfirmStatus, MarketEvent, OrderRequest, Strategy, StrategyContext};
 use bf_order_exec::{
     normalize_intent, NormalizationPolicy, OrderExecService, PolicyMode, RoundingMode,
 };
+use bf_order_manager::OrderManager;
+use bf_rest::RestClient;
 use bf_strategies::ExampleStrategy;
 use bf_ws::{extract_last_price_e9, parse_market_event, WsClient};
 use chrono::Utc;
 use rust_decimal::Decimal;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{error, info, Level};
 use tracing_subscriber::FmtSubscriber;
@@ -44,7 +47,7 @@ async fn main() -> Result<()> {
     info!("Loaded authentication secrets");
 
     // Initialize storage
-    let _storage = bf_storage_sqlite::SqliteStorage::new(&config.storage.db_path).await?;
+    let storage = Arc::new(bf_storage_sqlite::SqliteStorage::new(&config.storage.db_path).await?);
     info!("Initialized SQLite storage");
 
     // TODO: Initialize components
@@ -98,24 +101,35 @@ async fn main() -> Result<()> {
     };
 
     let mut executor_handle = None;
+    let mut account_handle = None;
+    let mut oms_error_rx = None;
     let mut order_tx: Option<mpsc::Sender<OrderRequest>> = None;
     if config.orders.allow_trading && runtime.run.mode.trading.eq_ignore_ascii_case("live") {
         let env = to_sdk_env(&runtime.profile.env.name);
         let token_manager = if matches!(env, BluefinEnvironment::Staging) {
-            TokenManager::with_test_keys(env)?
+            Arc::new(TokenManager::with_test_keys(env)?)
         } else {
             let account_address = secrets
                 .account_address
                 .clone()
                 .ok_or_else(|| anyhow::anyhow!("BLUEFIN_ACCOUNT_ADDRESS not set in .env"))?;
-            TokenManager::new(secrets.private_key.clone(), account_address, env)?
+            Arc::new(TokenManager::new(
+                secrets.private_key.clone(),
+                account_address,
+                env,
+            )?)
         };
         let ws_client = WsClient::new(config.clone());
         let token = token_manager.get_token().await?;
         let mut account_rx = ws_client.connect_account(&token).await?;
         let executor = bf_order_exec::BluefinOrderExecutor::new(
-            std::sync::Arc::new(token_manager),
+            token_manager.clone(),
             config.orders.default_leverage,
+        );
+        let rest_client = RestClient::new_with_trade_url(
+            config.clone(),
+            token_manager.clone(),
+            runtime.profile.rest.trade_url.clone(),
         );
         let service = OrderExecService::new(std::sync::Arc::new(executor));
         let fallback_enabled = runtime.app.execution.fallback_enabled;
@@ -123,19 +137,69 @@ async fn main() -> Result<()> {
             runtime.app.execution.confirm_timeout_secs,
         );
         let (tx, mut rx) = mpsc::channel::<OrderRequest>(32);
+        let (confirm_tx, mut confirm_rx) = mpsc::channel::<AccountEvent>(200);
+        let (oms_error_tx, oms_error_rx_inner) = mpsc::channel::<anyhow::Error>(1);
+        oms_error_rx = Some(oms_error_rx_inner);
         order_tx = Some(tx);
+
+        let order_manager = Arc::new(OrderManager::new(storage.clone()));
+        account_handle = Some(tokio::spawn({
+            let order_manager = order_manager.clone();
+            async move {
+                while let Some(event) = account_rx.recv().await {
+                    if let Err(e) = confirm_tx.send(event.clone()).await {
+                        error!("engine->executor transfer failed: {}", e);
+                        let _ = oms_error_tx
+                            .send(anyhow::anyhow!("engine->executor transfer failed: {}", e))
+                            .await;
+                        break;
+                    }
+                    if let AccountEvent::OrderUpdate(update) = event {
+                        if let Err(e) = order_manager.apply_update(update).await {
+                            error!("OMS invalid transition; halting for resync: {}", e);
+                            let _ = oms_error_tx
+                                .send(anyhow::anyhow!("OMS invalid transition: {}", e))
+                                .await;
+                            break;
+                        }
+                    }
+                }
+                Ok::<(), anyhow::Error>(())
+            }
+        }));
 
         executor_handle = Some(tokio::spawn(async move {
             while let Some(order) = rx.recv().await {
-                let (ack, status) = service
+                let market = order.market.clone();
+                let (ack, mut status) = service
                     .create_order_with_confirm(
                         order,
-                        &mut account_rx,
+                        &mut confirm_rx,
                         confirm_timeout,
                         fallback_enabled,
                     )
                     .await
                     .map_err(|e| anyhow::anyhow!("Order execution failed: {}", e))?;
+                if status == ConfirmStatus::TimedOut && fallback_enabled {
+                    let order_hash = match &ack {
+                        bf_order_exec::ExecResult::Acked { order_hash, .. } => order_hash,
+                    };
+                    match rest_client.get_open_orders(Some(&market)).await {
+                        Ok(open_orders) => {
+                            if let Some(found) =
+                                open_orders.iter().find(|o| o.order_hash == *order_hash)
+                            {
+                                status = ConfirmStatus::from(found.status);
+                                info!("Fallback openOrders confirm: {:?}", status);
+                            } else {
+                                info!("Fallback openOrders: order not found");
+                            }
+                        }
+                        Err(e) => {
+                            return Err(anyhow::anyhow!("Fallback openOrders failed: {}", e));
+                        }
+                    }
+                }
                 info!("Order ACK: {:?}", ack);
                 match status {
                     ConfirmStatus::Active
@@ -192,8 +256,25 @@ async fn main() -> Result<()> {
     info!("Bot initialization complete - ready for trading");
     info!("Markets: {:?}", config.markets.symbols);
 
-    // Keep running
-    tokio::signal::ctrl_c().await?;
+    if let Some(mut oms_error_rx) = oms_error_rx {
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {},
+            msg = oms_error_rx.recv() => {
+                if let Some(err) = msg {
+                    return Err(err);
+                }
+            }
+        }
+    } else {
+        tokio::signal::ctrl_c().await?;
+    }
+    if let Some(handle) = account_handle {
+        match handle.await {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => return Err(e),
+            Err(e) => return Err(anyhow::anyhow!("account task failed: {}", e)),
+        }
+    }
     info!("Shutting down...");
 
     Ok(())

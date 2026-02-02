@@ -12,6 +12,7 @@ Runtime selector files that compose app/profile/markets/plan (and future univers
 - Switching the run file changes the entire runtime behavior without code changes.
 - Live gating prevents accidental production execution.
 - [execution] は必須（欠落時は起動エラー）。
+- 確認待ちのタイムアウトは `execution.confirm_timeout_secs` で調整する。
 
 ## Writing Rules
 - Use relative paths to keep configs portable.

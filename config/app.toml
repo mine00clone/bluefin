@@ -18,7 +18,7 @@ requires_env = "ALLOW_LIVE_TRADING=YES"
 # Fallback (openOrders etc.) opt-in only
 fallback_enabled = false
 # WS confirm wait timeout (seconds)
-confirm_timeout_secs = 10
+confirm_timeout_secs = 15
 
 [normalization]
 # price/size: snap | reject

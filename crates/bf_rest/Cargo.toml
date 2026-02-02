@@ -18,6 +18,7 @@ serde_json = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+rust_decimal = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
@@ -51,6 +52,10 @@ path = "examples/create_order_raw.rs"
 [[example]]
 name = "cancel_orders_raw"
 path = "examples/cancel_orders_raw.rs"
+
+[[example]]
+name = "cancel_orders_raw_http"
+path = "examples/cancel_orders_raw_http.rs"
 
 [[example]]
 name = "raw_exchange_info_dump"

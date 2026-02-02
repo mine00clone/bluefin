@@ -58,8 +58,8 @@ time_in_force = "GTC"
 size = "0.001"
 # Price offset in basis points from last price (e.g., -300 = 3% below)
 price_offset_bps = -300
-# Optional absolute price override (string); when set, offset is ignored
-price_override = null
+# Optional absolute price override (string); when empty, offset is used
+price_override = ""
 
 [orders.cancel]
 # Cancel parameters for raw cancel script

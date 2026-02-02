@@ -79,7 +79,7 @@ Document the operational steps to capture raw REST/WS responses before any parsi
 
 ## Checklist
 - [ ] Confirm `.env` and `config/default.toml`
-- [ ] Capture REST raw responses
-- [ ] Capture WS raw messages
-- [ ] Manually inspect raw files
+- [x] Capture REST raw responses
+- [x] Capture WS raw messages
+- [x] Manually inspect raw files
 - [ ] Mask sensitive data before sharing

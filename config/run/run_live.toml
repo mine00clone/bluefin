@@ -3,6 +3,7 @@ app = "../app.toml"
 profile = "../profiles/prod.toml"
 markets_snapshot = "../markets/snapshot.json"
 plan = "../plans/plan_live.toml"
+strategy = "../strategies/example.toml"
 
 [mode]
 trading = "Live"

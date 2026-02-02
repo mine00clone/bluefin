@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 mod plan_config;
 mod market_snapshot;
+mod strategy_config;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -199,6 +200,7 @@ pub struct ProfileConfig {
 
 pub use plan_config::{PlanConfig, PlanOrderConfig};
 pub use market_snapshot::load_market_snapshot;
+pub use strategy_config::{StrategyConfig, StrategySettingsConfig};
 
 /// Runtime config resolved from run.toml
 #[derive(Debug, Clone)]
@@ -207,6 +209,8 @@ pub struct RuntimeConfig {
     pub app: AppSettingsConfig,
     pub profile: ProfileConfig,
     pub plan: PlanConfig,
+    pub strategy_path: Option<PathBuf>,
+    pub strategy: Option<StrategyConfig>,
     pub markets_snapshot_path: PathBuf,
     pub market_snapshot: bf_core::MarketSnapshot,
 }
@@ -242,6 +246,18 @@ pub fn load_run_config(path: &Path) -> Result<RuntimeConfig, ConfigError> {
     let profile: ProfileConfig = load_toml(&profile_path)?;
     let plan: PlanConfig = load_toml(&plan_path)?;
 
+    let strategy_path = run
+        .include
+        .strategy
+        .as_ref()
+        .map(|path| resolve_relative(base_dir, path));
+
+    let strategy: Option<StrategyConfig> = if let Some(path) = &strategy_path {
+        Some(load_toml(path)?)
+    } else {
+        None
+    };
+
     let market_snapshot = load_market_snapshot(&markets_snapshot_path)?;
 
     validate_plan_against_snapshot(&plan, &market_snapshot, &markets_snapshot_path)?;
@@ -251,6 +267,8 @@ pub fn load_run_config(path: &Path) -> Result<RuntimeConfig, ConfigError> {
         app,
         profile,
         plan,
+        strategy_path,
+        strategy,
         markets_snapshot_path,
         market_snapshot,
     };

@@ -12,6 +12,7 @@ members = [
     "crates/bf_history",
     "crates/bf_storage_sqlite",
     "crates/bf_app",
+    "crates/strategies",
 ]
 
 [workspace.package]
@@ -72,3 +73,4 @@ bf_order_exec = { path = "crates/bf_order_exec" }
 bf_order_manager = { path = "crates/bf_order_manager" }
 bf_history = { path = "crates/bf_history" }
 bf_storage_sqlite = { path = "crates/bf_storage_sqlite" }
+bf_strategies = { path = "crates/strategies" }

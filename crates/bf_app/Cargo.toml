@@ -21,6 +21,7 @@ bf_order_exec = { workspace = true }
 bf_order_manager = { workspace = true }
 bf_history = { workspace = true }
 bf_storage_sqlite = { workspace = true }
+bf_strategies = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -1,6 +1,9 @@
 //! Main application binary for Bluefin trading bot.
 
 use anyhow::Result;
+use bf_core::{MarketEvent, Strategy, StrategyContext};
+use bf_strategies::ExampleStrategy;
+use chrono::Utc;
 use tracing::{error, info, Level};
 use tracing_subscriber::FmtSubscriber;
 
@@ -46,6 +49,18 @@ async fn main() -> Result<()> {
     // 3. Periodic REST reconciliation
     // NOTE: If OrderManager::apply_update returns Err (invalid transition),
     //       stop trading and trigger resync/reconcile before continuing.
+    let mut strategies: Vec<Box<dyn Strategy>> = vec![Box::new(ExampleStrategy::new("BTC-PERP"))];
+    let ctx = StrategyContext { now: Utc::now() };
+    let dummy_event = MarketEvent::Ticker(bf_core::TickerEvent {
+        market: "BTC-PERP".to_string(),
+        payload: serde_json::json!({}),
+        received_at: Utc::now(),
+    });
+    let intents_count: usize = strategies
+        .iter_mut()
+        .map(|s| s.on_event(&ctx, dummy_event.clone()).len())
+        .sum();
+    info!("Strategy intents emitted: {}", intents_count);
 
     info!("Bot initialization complete - ready for trading");
     info!("Markets: {:?}", config.markets.symbols);

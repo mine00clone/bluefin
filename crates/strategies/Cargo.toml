@@ -1,0 +1,10 @@
+[package]
+name = "bf_strategies"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bf_core = { path = "../bf_core" }
+chrono = { workspace = true }
+uuid = { workspace = true }
+rust_decimal = { workspace = true }

@@ -1,20 +1,20 @@
 {
   "markets": [
     {
-      "market": "AVAX-PERP",
+      "market": "HYPE-PERP",
       "tick_size_e9": 1000000,
       "step_size_e9": 100000000,
       "min_order_quantity_e9": 100000000,
       "min_order_price_e9": 100000000,
-      "max_order_price_e9": 5000000000000
+      "max_order_price_e9": 1000000000000
     },
     {
-      "market": "XRP-PERP",
-      "tick_size_e9": 1000000,
+      "market": "DEEP-PERP",
+      "tick_size_e9": 10000,
       "step_size_e9": 1000000000,
       "min_order_quantity_e9": 1000000000,
-      "min_order_price_e9": 100000000,
-      "max_order_price_e9": 1000000000000
+      "min_order_price_e9": 10000000,
+      "max_order_price_e9": 500000000000
     },
     {
       "market": "SOL-PERP",
@@ -25,94 +25,6 @@
       "max_order_price_e9": 10000000000000
     },
     {
-      "market": "TRUMP-PERP",
-      "tick_size_e9": 1000000,
-      "step_size_e9": 100000000,
-      "min_order_quantity_e9": 100000000,
-      "min_order_price_e9": 100000000,
-      "max_order_price_e9": 1000000000000
-    },
-    {
-      "market": "BLUE-PERP",
-      "tick_size_e9": 100000,
-      "step_size_e9": 10000000000,
-      "min_order_quantity_e9": 10000000000,
-      "min_order_price_e9": 5000000,
-      "max_order_price_e9": 500000000000
-    },
-    {
-      "market": "SEND-PERP",
-      "tick_size_e9": 100000,
-      "step_size_e9": 10000000000,
-      "min_order_quantity_e9": 10000000000,
-      "min_order_price_e9": 10000000,
-      "max_order_price_e9": 500000000000
-    },
-    {
-      "market": "TAO-PERP",
-      "tick_size_e9": 1000000,
-      "step_size_e9": 100000000,
-      "min_order_quantity_e9": 100000000,
-      "min_order_price_e9": 1000000000,
-      "max_order_price_e9": 10000000000000
-    },
-    {
-      "market": "HYPE-PERP",
-      "tick_size_e9": 1000000,
-      "step_size_e9": 100000000,
-      "min_order_quantity_e9": 100000000,
-      "min_order_price_e9": 100000000,
-      "max_order_price_e9": 1000000000000
-    },
-    {
-      "market": "JUP-PERP",
-      "tick_size_e9": 100000,
-      "step_size_e9": 10000000000,
-      "min_order_quantity_e9": 10000000000,
-      "min_order_price_e9": 10000000,
-      "max_order_price_e9": 500000000000
-    },
-    {
-      "market": "DOGE-PERP",
-      "tick_size_e9": 100000,
-      "step_size_e9": 10000000000,
-      "min_order_quantity_e9": 10000000000,
-      "min_order_price_e9": 10000000,
-      "max_order_price_e9": 500000000000
-    },
-    {
-      "market": "SEI-PERP",
-      "tick_size_e9": 100000,
-      "step_size_e9": 10000000000,
-      "min_order_quantity_e9": 10000000000,
-      "min_order_price_e9": 10000000,
-      "max_order_price_e9": 500000000000
-    },
-    {
-      "market": "POL-PERP",
-      "tick_size_e9": 100000,
-      "step_size_e9": 10000000000,
-      "min_order_quantity_e9": 10000000000,
-      "min_order_price_e9": 10000000,
-      "max_order_price_e9": 500000000000
-    },
-    {
-      "market": "TIA-PERP",
-      "tick_size_e9": 1000000,
-      "step_size_e9": 1000000000,
-      "min_order_quantity_e9": 1000000000,
-      "min_order_price_e9": 10000000,
-      "max_order_price_e9": 1000000000000
-    },
-    {
-      "market": "APT-PERP",
-      "tick_size_e9": 1000000,
-      "step_size_e9": 1000000000,
-      "min_order_quantity_e9": 1000000000,
-      "min_order_price_e9": 100000000,
-      "max_order_price_e9": 1000000000000
-    },
-    {
       "market": "WAL-PERP",
       "tick_size_e9": 100000,
       "step_size_e9": 1000000000,
@@ -121,12 +33,12 @@
       "max_order_price_e9": 1000000000000
     },
     {
-      "market": "ARB-PERP",
+      "market": "SUI-PERP",
       "tick_size_e9": 100000,
-      "step_size_e9": 10000000000,
-      "min_order_quantity_e9": 10000000000,
-      "min_order_price_e9": 10000000,
-      "max_order_price_e9": 500000000000
+      "step_size_e9": 1000000000,
+      "min_order_quantity_e9": 1000000000,
+      "min_order_price_e9": 100000000,
+      "max_order_price_e9": 1000000000000
     },
     {
       "market": "BTC-PERP",
@@ -135,22 +47,6 @@
       "min_order_quantity_e9": 1000000,
       "min_order_price_e9": 1000000000000,
       "max_order_price_e9": 1000000000000000
-    },
-    {
-      "market": "DEEP-PERP",
-      "tick_size_e9": 10000,
-      "step_size_e9": 10000000000,
-      "min_order_quantity_e9": 10000000000,
-      "min_order_price_e9": 10000000,
-      "max_order_price_e9": 500000000000
-    },
-    {
-      "market": "SUI-PERP",
-      "tick_size_e9": 100000,
-      "step_size_e9": 1000000000,
-      "min_order_quantity_e9": 1000000000,
-      "min_order_price_e9": 100000000,
-      "max_order_price_e9": 1000000000000
     },
     {
       "market": "ETH-PERP",

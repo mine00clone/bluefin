@@ -1,8 +1,9 @@
 //! Main application binary for Bluefin trading bot.
 
 use anyhow::Result;
+use bf_auth::{BluefinEnvironment, TokenManager};
 use bf_core::{MarketEvent, Strategy, StrategyContext};
-use bf_order_exec::{normalize_intent, NormalizationPolicy, PolicyMode, RoundingMode};
+use bf_order_exec::{normalize_intent, NormalizationPolicy, OrderExecService, PolicyMode, RoundingMode};
 use bf_strategies::ExampleStrategy;
 use bf_ws::{extract_last_price_e9, parse_market_event};
 use chrono::Utc;
@@ -36,7 +37,7 @@ async fn main() -> Result<()> {
     info!("Loaded runtime config: {}", run_config_path);
 
     // Load secrets
-    let _secrets = bf_config::AppConfig::load_secrets()?;
+    let secrets = bf_config::AppConfig::load_secrets()?;
     info!("Loaded authentication secrets");
 
     // Initialize storage
@@ -105,7 +106,30 @@ async fn main() -> Result<()> {
             normalized.market, normalized.side, normalized.size, normalized.price
         );
         if config.orders.allow_trading {
-            info!("Execution disabled in bf_app (executor wiring TODO).");
+            if runtime.run.mode.trading.eq_ignore_ascii_case("live") {
+                let env = to_sdk_env(&runtime.profile.env.name);
+                let token_manager = if matches!(env, BluefinEnvironment::Staging) {
+                    TokenManager::with_test_keys(env)?
+                } else {
+                    let account_address = secrets
+                        .account_address
+                        .clone()
+                        .ok_or_else(|| anyhow::anyhow!("BLUEFIN_ACCOUNT_ADDRESS not set in .env"))?;
+                    TokenManager::new(secrets.private_key.clone(), account_address, env)?
+                };
+                let executor = bf_order_exec::BluefinOrderExecutor::new(
+                    std::sync::Arc::new(token_manager),
+                    config.orders.default_leverage,
+                );
+                let service = OrderExecService::new(std::sync::Arc::new(executor));
+                let ack = service.create_order(normalized).await?;
+                info!("Order ACK: {:?}", ack);
+            } else {
+                info!(
+                    "Trading enabled but mode is {}; execution skipped",
+                    runtime.run.mode.trading
+                );
+            }
         } else {
             info!("Trading disabled by config.orders.allow_trading=false");
         }
@@ -158,6 +182,13 @@ fn parse_rounding(raw: &str) -> anyhow::Result<RoundingMode> {
         "up" => Ok(RoundingMode::Up),
         "nearest" => Ok(RoundingMode::Nearest),
         other => Err(anyhow::anyhow!("Invalid rounding: {}", other)),
+    }
+}
+
+fn to_sdk_env(env: &bf_config::Environment) -> BluefinEnvironment {
+    match env {
+        bf_config::Environment::Staging => BluefinEnvironment::Staging,
+        bf_config::Environment::Prod => BluefinEnvironment::Production,
     }
 }
 

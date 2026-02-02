@@ -8,7 +8,7 @@ side = "BUY"
 order_type = "LIMIT"
 # 3% below market
 price_offset_bps = -300
-size_quantity = "0.001"
+size_quantity = "1"
 tif = "GTC"
 post_only = true
 reduce_only = false

@@ -160,7 +160,7 @@ pub fn normalize_intent(
         meta.step_size_e9 as i128,
         policy.size_policy,
         policy.size_rounding,
-        policy.max_deviation_bps,
+        0,
         "size",
     )?;
     let snapped_size = snapped_size.max(0);

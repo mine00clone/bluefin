@@ -4,7 +4,7 @@ use anyhow::Result;
 use bf_core::{MarketEvent, Strategy, StrategyContext};
 use bf_order_exec::{normalize_intent, NormalizationPolicy, PolicyMode, RoundingMode};
 use bf_strategies::ExampleStrategy;
-use bf_ws::extract_last_price_e9;
+use bf_ws::{extract_last_price_e9, parse_market_event};
 use chrono::Utc;
 use rust_decimal::Decimal;
 use tracing::{error, info, Level};
@@ -66,18 +66,20 @@ async fn main() -> Result<()> {
         }
     }
     let ctx = StrategyContext { now: Utc::now() };
-    let dummy_event = MarketEvent::Ticker(bf_core::TickerEvent {
-        market: "SUI-PERP".to_string(),
-        payload: serde_json::json!({"last_price_e9": "100000000000000"}),
-        received_at: Utc::now(),
-    });
+    let market_event = load_latest_market_event("data/raw/ws_market_raw.json")
+        .await
+        .unwrap_or_else(|| MarketEvent::Ticker(bf_core::TickerEvent {
+            market: "SUI-PERP".to_string(),
+            payload: serde_json::json!({"last_price_e9": "100000000000000"}),
+            received_at: Utc::now(),
+        }));
     let mut intents = Vec::new();
     for strategy in strategies.iter_mut() {
-        intents.extend(strategy.on_event(&ctx, dummy_event.clone()));
+        intents.extend(strategy.on_event(&ctx, market_event.clone()));
     }
     info!("Strategy intents emitted: {}", intents.len());
 
-    let last_price = extract_last_price(&dummy_event)?;
+    let last_price = extract_last_price(&market_event)?;
     let policy = NormalizationPolicy {
         price_policy: parse_policy(&runtime.app.normalization.price_policy)?,
         size_policy: parse_policy(&runtime.app.normalization.size_policy)?,
@@ -102,6 +104,11 @@ async fn main() -> Result<()> {
             "Normalized order: {} {} {} @ {:?}",
             normalized.market, normalized.side, normalized.size, normalized.price
         );
+        if config.orders.allow_trading {
+            info!("Execution disabled in bf_app (executor wiring TODO).");
+        } else {
+            info!("Trading disabled by config.orders.allow_trading=false");
+        }
     }
 
     info!("Bot initialization complete - ready for trading");
@@ -152,4 +159,16 @@ fn parse_rounding(raw: &str) -> anyhow::Result<RoundingMode> {
         "nearest" => Ok(RoundingMode::Nearest),
         other => Err(anyhow::anyhow!("Invalid rounding: {}", other)),
     }
+}
+
+async fn load_latest_market_event(path: &str) -> Option<MarketEvent> {
+    let content = tokio::fs::read_to_string(path).await.ok()?;
+    let values: Vec<serde_json::Value> = serde_json::from_str(&content).ok()?;
+    let mut last: Option<MarketEvent> = None;
+    for value in values {
+        if let Some(evt) = parse_market_event(&value) {
+            last = Some(evt);
+        }
+    }
+    last
 }

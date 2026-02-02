@@ -172,7 +172,7 @@ impl BluefinOrderExecutor {
             post_only: if request.post_only { Some(true) } else { None },
             time_in_force: Some(Self::convert_tif(request.time_in_force)),
             trigger_price_e9: None,
-            self_trade_prevention_type: Some(SelfTradePreventionType::Maker),
+            self_trade_prevention_type: Some(SelfTradePreventionType::Unspecified),
             ..Default::default()
         };
 

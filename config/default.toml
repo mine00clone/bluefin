@@ -40,7 +40,7 @@ raw_path = "data/raw"
 
 [orders]
 # Safety gate: must be true to place orders from raw scripts
-allow_trading = false
+allow_trading = true
 # Default leverage (1-100); used by raw create order scripts
 default_leverage = 10
 # Default order flags (configurable without rebuild)

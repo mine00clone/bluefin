@@ -6,8 +6,8 @@ enabled = true
 market = "SUI-PERP"
 side = "BUY"
 order_type = "LIMIT"
-# 3% below market
-price_offset_bps = -300
+# 5% below market
+price_offset_bps = -500
 size_quantity = "1"
 tif = "GTC"
 post_only = true

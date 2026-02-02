@@ -1,24 +1,19 @@
-//! Raw create order requester using bluefin-pro SDK
-//!
-//! Tests:
-//! - POST /trade/orders
+//! Raw create order via HTTP to capture response body.
 //!
 //! Usage:
-//!   cargo run --example create_order_raw -p bf_rest -- --run config/run/run_live.toml
+//!   cargo run --example create_order_raw_http -p bf_rest -- --run config/run/run_live.toml
 
 use bf_config::{load_run_config, Environment as BfEnvironment};
-use bluefin_api::apis::{
-    configuration::Configuration, exchange_api::get_market_ticker, trade_api::post_create_order,
-};
 use bluefin_api::models::{
-    CreateOrderRequest, CreateOrderRequestSignedFields, LoginRequest, OrderSide,
-    OrderTimeInForce, OrderType as SdkOrderType, SelfTradePreventionType,
+    CreateOrderRequest, CreateOrderRequestSignedFields, LoginRequest, OrderSide, OrderTimeInForce,
+    OrderType as SdkOrderType, SelfTradePreventionType,
 };
 use bluefin_pro::prelude::*;
 use chrono::Utc;
 use hex::FromHex;
 use rand::random;
 use rust_decimal::Decimal;
+use serde_json::Value;
 use std::env;
 use std::fs::{self, File};
 use std::io::Write;
@@ -34,19 +29,16 @@ fn to_sdk_env(env: &BfEnvironment) -> Environment {
     }
 }
 
-fn decimal_to_e9(value: Decimal) -> String {
-    let scaled = value * Decimal::from(E9);
-    scaled.trunc().to_string()
-}
-
-fn parse_stp(raw: &str) -> anyhow::Result<SelfTradePreventionType> {
-    match raw.to_uppercase().as_str() {
-        "TAKER" => Ok(SelfTradePreventionType::Taker),
-        "MAKER" => Ok(SelfTradePreventionType::Maker),
-        "BOTH" => Ok(SelfTradePreventionType::Both),
-        "UNSPECIFIED" => Ok(SelfTradePreventionType::Unspecified),
-        _ => Err(anyhow::anyhow!("Invalid self_trade_prevention_type: {}", raw)),
+fn parse_run_arg() -> String {
+    let mut args = env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--run" {
+            if let Some(val) = args.next() {
+                return val;
+            }
+        }
     }
+    "config/run/run_live.toml".to_string()
 }
 
 fn parse_side(raw: &str) -> anyhow::Result<OrderSide> {
@@ -68,35 +60,27 @@ fn parse_order_type(raw: &str) -> anyhow::Result<SdkOrderType> {
 fn parse_tif(raw: &str) -> anyhow::Result<OrderTimeInForce> {
     match raw.to_uppercase().as_str() {
         "GTC" => Ok(OrderTimeInForce::Gtt),
-        "GTT" => Ok(OrderTimeInForce::Gtt),
         "IOC" => Ok(OrderTimeInForce::Ioc),
         "FOK" => Ok(OrderTimeInForce::Fok),
         _ => Err(anyhow::anyhow!("Invalid tif: {}", raw)),
     }
 }
 
-fn snap_to_step(value_e9: u64, step_e9: u64) -> u64 {
-    if step_e9 == 0 {
-        return value_e9;
-    }
-    (value_e9 / step_e9) * step_e9
+fn decimal_to_e9(value: Decimal) -> String {
+    let scaled = value * Decimal::from(E9);
+    scaled.trunc().to_string()
 }
 
-fn parse_run_arg() -> String {
-    let mut args = env::args().skip(1);
-    while let Some(arg) = args.next() {
-        if arg == "--run" {
-            if let Some(val) = args.next() {
-                return val;
-            }
-        }
+fn snap_to_step(value: u64, step: u64) -> u64 {
+    if step == 0 {
+        return value;
     }
-    "config/run/run_live.toml".to_string()
+    value - (value % step)
 }
 
 fn read_last_price_from_ws_raw(path: &Path, market: &str) -> anyhow::Result<Option<u64>> {
     let content = fs::read_to_string(path)?;
-    let values: Vec<serde_json::Value> = serde_json::from_str(&content)?;
+    let values: Vec<Value> = serde_json::from_str(&content)?;
     for value in values.iter().rev() {
         let payload = value.get("payload").unwrap_or(value);
         let symbol = payload
@@ -121,41 +105,29 @@ fn read_last_price_from_ws_raw(path: &Path, market: &str) -> anyhow::Result<Opti
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    println!("=== Bluefin Create Order Raw ===\n");
+    println!("=== Bluefin Create Order Raw (HTTP) ===\n");
 
     let run_path = parse_run_arg();
     let runtime = load_run_config(Path::new(&run_path))?;
     let environment = to_sdk_env(&runtime.profile.env.name);
 
-    // Load .env for secrets (secrets only)
     dotenvy::dotenv().ok();
-    let use_test_keys = std::env::var("BLUEFIN_USE_TEST_KEYS").ok().as_deref() == Some("1");
-    let is_staging = matches!(environment, Environment::Staging);
-    let (private_key_hex, account_address) = if use_test_keys && is_staging {
-        let test_keys = environment
-            .test_keys()
-            .expect("Test keys not available for this environment");
-        (test_keys.private_key.to_string(), test_keys.address.to_string())
-    } else {
-        let secrets = bf_config::AppConfig::load_secrets()?;
-        let account_address = secrets
-            .account_address
-            .expect("BLUEFIN_ACCOUNT_ADDRESS not set in .env");
-        (secrets.private_key, account_address)
-    };
+    let secrets = bf_config::AppConfig::load_secrets()?;
+    let private_key_hex = secrets.private_key;
+    let account_address = secrets
+        .account_address
+        .expect("BLUEFIN_ACCOUNT_ADDRESS not set in .env");
 
     if private_key_hex.starts_with("suiprivk") || private_key_hex.len() != 64 {
         return Err(anyhow::anyhow!("Private key must be 64-char hex"));
     }
 
     let snapshot = &runtime.market_snapshot;
-
     let raw_dir = Path::new(&runtime.app.paths.raw_path).join("rest");
     fs::create_dir_all(&raw_dir)?;
-
     let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
 
-    // Authenticate once
+    // Authenticate
     let login_request = LoginRequest::new(
         account_address.clone(),
         Utc::now().timestamp_millis(),
@@ -163,42 +135,12 @@ async fn main() -> anyhow::Result<()> {
     );
     let private_key = PrivateKey::from_hex(&private_key_hex)?;
     let signature = login_request.signature(SignatureScheme::Ed25519, private_key)?;
-    let token_response = match login_request.authenticate(&signature, environment).await {
-        Ok(response) => response,
-        Err(e) => {
-            let output_path = raw_dir.join(format!("create_order_auth_error_{}.json", timestamp));
-            let output = serde_json::json!({
-                "error": e.to_string(),
-                "timestamp": Utc::now().to_rfc3339(),
-            });
-            let mut file = File::create(&output_path)?;
-            writeln!(file, "{}", serde_json::to_string_pretty(&output)?)?;
-            println!("Saved to: {}", output_path.display());
-            return Err(e.into());
-        }
-    };
-
-    let trade_config = Configuration {
-        base_path: runtime.profile.rest.trade_url.clone(),
-        bearer_access_token: Some(token_response.access_token.clone()),
-        ..Configuration::new()
-    };
+    let token_response = login_request.authenticate(&signature, environment).await?;
 
     // Fetch contracts config once (ids_id)
-    let contracts_config = match exchange::info::contracts_config(environment).await {
-        Ok(config) => config,
-        Err(e) => {
-            let output_path = raw_dir.join(format!("create_order_contracts_error_{}.json", timestamp));
-            let output = serde_json::json!({
-                "error": e.to_string(),
-                "timestamp": Utc::now().to_rfc3339(),
-            });
-            let mut file = File::create(&output_path)?;
-            writeln!(file, "{}", serde_json::to_string_pretty(&output)?)?;
-            println!("Saved to: {}", output_path.display());
-            return Err(anyhow::anyhow!(e.to_string()));
-        }
-    };
+    let contracts_config = exchange::info::contracts_config(environment)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
     for plan_order in &runtime.plan.orders {
         let market = plan_order.market.clone();
@@ -210,25 +152,9 @@ async fn main() -> anyhow::Result<()> {
         let order_type = parse_order_type(&plan_order.order_type)?;
         let tif = parse_tif(&plan_order.tif)?;
 
-        let ws_raw_path = Path::new(&runtime.app.paths.raw_path)
-            .join("ws_market_raw.json");
-        let last_price_e9 = match read_last_price_from_ws_raw(&ws_raw_path, &market)? {
-            Some(price) => price,
-            None => {
-                let output_path =
-                    raw_dir.join(format!("create_order_ticker_error_{}_{}.json", plan_order.id, timestamp));
-                let output = serde_json::json!({
-                    "error": format!("Missing lastPriceE9 in ws raw: {}", ws_raw_path.display()),
-                    "timestamp": Utc::now().to_rfc3339(),
-                });
-                let mut file = File::create(&output_path)?;
-                writeln!(file, "{}", serde_json::to_string_pretty(&output)?)?;
-                println!("Saved to: {}", output_path.display());
-                return Err(anyhow::anyhow!("Missing lastPriceE9 in ws raw"));
-            }
-        };
-        let signed_at_millis = Utc::now().timestamp_millis() as u64;
-        let expires_at_millis = signed_at_millis + 6 * 60 * 1000;
+        let ws_raw_path = Path::new(&runtime.app.paths.raw_path).join("ws_market_raw.json");
+        let last_price_e9 = read_last_price_from_ws_raw(&ws_raw_path, &market)?
+            .ok_or_else(|| anyhow::anyhow!("Missing lastPriceE9 in ws raw: {}", ws_raw_path.display()))?;
 
         let (mut price_e9_u64, price_is_set) = if matches!(order_type, SdkOrderType::Limit) {
             match plan_order.price_mode.as_str() {
@@ -287,11 +213,10 @@ async fn main() -> anyhow::Result<()> {
             is_isolated: false,
             salt: random::<u64>().to_string(),
             ids_id: contracts_config.ids_id.clone(),
-            expires_at_millis: expires_at_millis as i64,
-            signed_at_millis: signed_at_millis as i64,
+            expires_at_millis: (Utc::now().timestamp_millis() + 6 * 60 * 1000) as i64,
+            signed_at_millis: Utc::now().timestamp_millis(),
         };
 
-        let stp = parse_stp("UNSPECIFIED")?;
         let order_request = CreateOrderRequest {
             signed_fields,
             client_order_id: Some(plan_order.id.clone()),
@@ -300,34 +225,38 @@ async fn main() -> anyhow::Result<()> {
             post_only: if plan_order.post_only { Some(true) } else { None },
             time_in_force: Some(tif),
             trigger_price_e9: None,
-            self_trade_prevention_type: Some(stp),
+            self_trade_prevention_type: Some(SelfTradePreventionType::Unspecified),
             ..Default::default()
         };
 
         let private_key = PrivateKey::from_hex(&private_key_hex)?;
         let signed_request = order_request.sign(private_key, SignatureScheme::Ed25519)?;
 
-        let response = post_create_order(&trade_config, signed_request.clone()).await;
-        let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
-        let output_path = raw_dir.join(format!("create_order_{}_{}.json", plan_order.id, timestamp));
-        let output = match &response {
-            Ok(ok) => serde_json::json!({
-                "request": signed_request,
-                "response": ok,
-                "timestamp": Utc::now().to_rfc3339(),
-            }),
-            Err(e) => serde_json::json!({
-                "request": signed_request,
-                "error": e.to_string(),
-                "timestamp": Utc::now().to_rfc3339(),
-            }),
-        };
+        let url = format!("{}/api/v1/trade/orders", runtime.profile.rest.trade_url);
+        let client = reqwest::Client::new();
+        let response = client
+            .post(&url)
+            .bearer_auth(&token_response.access_token)
+            .json(&signed_request)
+            .send()
+            .await?;
+
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+
+        let output_path = raw_dir.join(format!("create_order_http_{}_{}.json", plan_order.id, timestamp));
+        let output = serde_json::json!({
+            "request": signed_request,
+            "status": status.as_u16(),
+            "body": body,
+            "timestamp": Utc::now().to_rfc3339(),
+        });
         let mut file = File::create(&output_path)?;
         writeln!(file, "{}", serde_json::to_string_pretty(&output)?)?;
         println!("Saved to: {}", output_path.display());
 
-        if let Err(e) = response {
-            return Err(e.into());
+        if !status.is_success() {
+            return Err(anyhow::anyhow!("HTTP status {}", status));
         }
     }
 

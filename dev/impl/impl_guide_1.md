@@ -152,6 +152,7 @@
 
 * `/auth/v2/token` と `/auth/token/refresh` を扱う
 * トークンの期限（5分）を考慮し自動更新（refresh）する ([Bluefin Exchange][9])
+  * 現状: refresh は未実装で acquire にフォールバック
 
 4. `bf_rest`
 
@@ -310,6 +311,7 @@
 
 * `.env` と `config/*.toml` を用意
 * `bf_ws`：`/ws/account` に接続し、受信を `data/raw/ws/...` に保存できる ([Bluefin Exchange][6])
+  * 現状: WsClient 本体は TODO。examples は動作確認済み
 * `bf_rest`：`openOrders` が取得でき、raw JSON を保存できる ([Bluefin Exchange][5])
 * `bf_order_exec`：
 

@@ -69,7 +69,7 @@ let token = token_manager.get_token().await?;
 機能:
 - Ed25519署名によるSuiウォレット認証
 - JWTトークン取得（5分有効）
-- 自動トークン更新（30秒前にexpiry検出）
+- 自動トークン更新（expiry検出は実装、/auth/token/refresh は未実装で再取得にフォールバック）
 - SDKテストアカウント対応
 
 ### bf_order_exec
@@ -105,13 +105,14 @@ executor.cancel_all("ETH-PERP").await?;
 - Decimal→e9変換
 
 ### bf_ws
-**状態**: 基本実装完了・動作確認済み
+**状態**: 基本スケルトン + raw 取得 examples は動作確認済み
 
 機能:
-- Market WebSocket接続
-- Account WebSocket接続（認証付き）
-- Subscription/Unsubscription
-- Ping/Pong対応
+- Market WebSocket接続（examples）
+- Account WebSocket接続（認証付き, examples）
+- Subscription/Unsubscription（examples）
+- Ping/Pong対応（examples）
+- WsClient本体は接続/購読/受信が未実装（TODO）
 
 ### bf_rest
 **状態**: スケルトン実装

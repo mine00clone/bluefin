@@ -9,8 +9,8 @@
 - MODIFY: crates/bf_rest/examples/create_order_raw.rs
 - MODIFY: crates/bf_rest/examples/cancel_order_raw.rs
 - ADD: crates/bf_rest/examples/open_orders_raw.rs
-- ADD: crates/bf_ws/examples/ws_account_raw_dump.rs
-- ADD: crates/bf_ws/examples/ws_market_raw_dump.rs
+- ADD: crates/bf_ws/examples/account_stream.rs
+- ADD: crates/bf_ws/examples/market_stream.rs
 - ADD: crates/bf_core/src/redact.rs（JSON redaction）
 - MODIFY: scripts/*.sh（run config 引数を渡す）
 

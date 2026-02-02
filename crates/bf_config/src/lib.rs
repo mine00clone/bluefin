@@ -208,6 +208,7 @@ pub struct RuntimeConfig {
     pub profile: ProfileConfig,
     pub plan: PlanConfig,
     pub markets_snapshot_path: PathBuf,
+    pub market_snapshot: bf_core::MarketSnapshot,
 }
 
 fn load_toml<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, ConfigError> {
@@ -241,16 +242,76 @@ pub fn load_run_config(path: &Path) -> Result<RuntimeConfig, ConfigError> {
     let profile: ProfileConfig = load_toml(&profile_path)?;
     let plan: PlanConfig = load_toml(&plan_path)?;
 
+    let market_snapshot = load_market_snapshot(&markets_snapshot_path)?;
+
+    validate_plan_against_snapshot(&plan, &market_snapshot)?;
+
     let runtime = RuntimeConfig {
         run,
         app,
         profile,
         plan,
         markets_snapshot_path,
+        market_snapshot,
     };
 
     validate_runtime_config(&runtime)?;
     Ok(runtime)
+}
+
+fn validate_plan_against_snapshot(
+    plan: &PlanConfig,
+    snapshot: &bf_core::MarketSnapshot,
+) -> Result<(), ConfigError> {
+    for order in &plan.orders {
+        if snapshot.get(&order.market).is_none() {
+            return Err(ConfigError::EnvError(format!(
+                "Plan references unknown market: {}",
+                order.market
+            )));
+        }
+        match order.price_mode.as_str() {
+            "absolute" => {
+                if order.price_e9.is_none() {
+                    return Err(ConfigError::EnvError(format!(
+                        "Order {} requires price_e9 for price_mode=absolute",
+                        order.id
+                    )));
+                }
+            }
+            "offset_bps" => {
+                if order.price_bps.is_none() {
+                    return Err(ConfigError::EnvError(format!(
+                        "Order {} requires price_bps for price_mode=offset_bps",
+                        order.id
+                    )));
+                }
+            }
+            other => {
+                return Err(ConfigError::EnvError(format!(
+                    "Order {} has invalid price_mode: {}",
+                    order.id, other
+                )));
+            }
+        }
+        match order.size_mode.as_str() {
+            "quantity" => {
+                if order.quantity.is_none() {
+                    return Err(ConfigError::EnvError(format!(
+                        "Order {} requires quantity for size_mode=quantity",
+                        order.id
+                    )));
+                }
+            }
+            other => {
+                return Err(ConfigError::EnvError(format!(
+                    "Order {} has invalid size_mode: {}",
+                    order.id, other
+                )));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Validate runtime configuration for safety and existence.

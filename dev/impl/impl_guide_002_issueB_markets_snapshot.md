@@ -43,7 +43,7 @@
 - tickSizeE9/stepSizeE9/minOrderQuantityE9 が /exchange/info に存在する想定（ただし実装は raw で検証してから確定）
 
 ## Checklist
-- [ ] raw を保存し、目視確認できる
-- [ ] snapshot を生成し、実行時通信なしで読み込める
+- [x] raw を保存し、目視確認できる（raw dump example + script 追加）
+- [x] snapshot を生成し、実行時通信なしで読み込める（generator tool 追加）
 - [ ] Executor が tick/step/min を使って fail-fast or snap できる
 - [ ] examples が「実行時に exchange/info を取らない」状態になった

@@ -10,14 +10,15 @@ staging環境での動作確認済み。
 ## 実装済みクレート
 
 ### bf_config
-**状態**: 基本実装完了
+**状態**: 基本実装完了 + Phase1の設定分割を追加
 
 - `config/default.toml`からの設定読み込み
 - `.env`からのシークレット読み込み
 - `Environment`（Staging/Prod）の定義
+- `run.toml` を入口にした config 分割（app/profile/plan/markets）
 
 ### bf_core
-**状態**: 基本実装完了
+**状態**: 基本実装完了 + 市場メタ/Planモデル追加
 
 ドメイン型とトレイト定義:
 
@@ -32,6 +33,8 @@ staging環境での動作確認済み。
 | `OrderStatus` | Open/Partial/Filled/Cancelled/Expired/Rejected |
 | `Balance` | 残高 |
 | `Fill` | 約定 |
+| `MarketMeta` | 市場制約（tick/step/min等） |
+| `Plan` | 複数注文のPlan（Phase1最小） |
 
 トレイト:
 

@@ -60,6 +60,6 @@ cancel_after_ms = 15000
 - order数上限（後で risk へ移す）
 
 ## Checklist
-- [ ] plan_* の差し替えだけで「複数注文」が切り替わる
-- [ ] float無しで表現できる（string/整数のみ）
-- [ ] 起動時に plan の整合性チェックが走る
+- [x] plan_* の差し替えだけで「複数注文」が切り替わる（run.toml で plan 切替対応）
+- [x] float無しで表現できる（string/整数のみ）
+- [x] 起動時に plan の整合性チェックが走る（snapshot照合 + モード検証）

@@ -6,7 +6,7 @@
 //! Usage:
 //!   cargo run --example create_order_raw -p bf_rest -- --run config/run/run_live.toml
 
-use bf_config::{load_market_snapshot, load_run_config, Environment as BfEnvironment};
+use bf_config::{load_run_config, Environment as BfEnvironment};
 use bluefin_api::apis::{
     configuration::Configuration, exchange_api::get_market_ticker, trade_api::post_create_order,
 };
@@ -23,7 +23,6 @@ use std::env;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
-use std::str::FromStr;
 use sui_sdk_types::SignatureScheme;
 
 const E9: u64 = 1_000_000_000;
@@ -129,7 +128,7 @@ async fn main() -> anyhow::Result<()> {
         ..Configuration::new()
     };
 
-    let snapshot = load_market_snapshot(&runtime.markets_snapshot_path)?;
+    let snapshot = &runtime.market_snapshot;
 
     let raw_dir = Path::new(&runtime.app.paths.raw_path).join("rest");
     fs::create_dir_all(&raw_dir)?;

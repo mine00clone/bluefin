@@ -55,3 +55,7 @@ path = "examples/cancel_orders_raw.rs"
 [[example]]
 name = "raw_exchange_info_dump"
 path = "examples/raw_exchange_info_dump.rs"
+
+[[example]]
+name = "generate_market_snapshot"
+path = "examples/generate_market_snapshot.rs"

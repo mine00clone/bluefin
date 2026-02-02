@@ -57,8 +57,30 @@
 
 ## Reference Findings (要約)
 - 失敗を `Ok(Rejected/Failed)` で返すことで上位が成功扱いし得る
+- 実行前バリデーションを迂回すると、価格 0 等の危険なリクエストが作れ得る
 - SDK 変換で未知値が黙って既定値に落ちる
 - cancel-all の返却が空配列で誤解され得る
 - 不正遷移が warn のみで継続される
 - market snapshot が空でも plan が通る
 - leverage がハードコードされている
+- post-only + 非GTC が warn のみで通る
+
+## Concrete Findings (2026-02-02 時点 / 実装箇所)
+- Critical: `OrderExecService::create_order` / `cancel` が、実行エラーを `Err` ではなく `Ok(ExecResult::Rejected)` / `Ok(CancelResult::Failed)` に変換して返している
+  - `crates/bf_order_exec/src/lib.rs:66` `crates/bf_order_exec/src/lib.rs:102`
+- High: `build_order_request` が `request.price=None` の場合に `price_e9="0"` にフォールバックする（OrderExecutor を直接叩く経路で危険な注文が作れ得る）
+  - `crates/bf_order_exec/src/bluefin_executor.rs:134`
+- High: 未知/未指定の受信値を黙って既定値に落としている
+  - `OrderSide::Unspecified -> Sell` `crates/bf_order_exec/src/bluefin_executor.rs:198`
+  - `OrderType::_ -> Limit` `crates/bf_order_exec/src/bluefin_executor.rs:202`
+  - `OrderTimeInForce::_ -> Gtc` / `None -> Gtc` `crates/bf_order_exec/src/bluefin_executor.rs:211`
+- High: `execute_cancel` が `CancelRequest::AllForMarket` の場合に空配列を返す（上位が「空=キャンセル無し」と誤解し得る）
+  - `crates/bf_order_exec/src/bluefin_executor.rs:229`
+- Medium: `OrderManager::apply_update` が不正遷移を warn のみにして状態を上書きする（重複注文判断の誤りにつながり得る）
+  - `crates/bf_order_manager/src/lib.rs:69`
+- Medium: `validate_plan_against_snapshot` が `snapshot.markets` 空のときに検証をスキップする（未知 market の plan が通り得る）
+  - `crates/bf_config/src/lib.rs:262`
+- Medium: `BluefinOrderExecutor::new` の leverage が 10x 固定（設定欠落時の暗黙フォールバックが危険）
+  - `crates/bf_order_exec/src/bluefin_executor.rs:37`
+- Low: `validate_order` が post-only + 非GTC を warn のみにして通す（仕様により即時約定寄りの挙動になる恐れ）
+  - `crates/bf_order_exec/src/lib.rs:161`

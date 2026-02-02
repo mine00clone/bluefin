@@ -4,7 +4,8 @@
 //! - Token acquisition via /auth/v2/token
 //! - Automatic token refresh (5-minute expiry)
 
-use bluefin_api::models::LoginRequest;
+use bluefin_api::apis::{auth_api::auth_token_refresh_put, configuration::Configuration};
+use bluefin_api::models::{LoginRequest, RefreshTokenRequest};
 use bluefin_pro::prelude::*;
 use chrono::{DateTime, Duration, Utc};
 use hex::FromHex;
@@ -200,13 +201,27 @@ impl TokenManager {
     }
 
     /// Refresh token via /auth/token/refresh
-    async fn refresh_token(&self, _refresh_token: &str) -> Result<AuthToken, AuthError> {
+    async fn refresh_token(&self, refresh_token: &str) -> Result<AuthToken, AuthError> {
         debug!("Refreshing auth token");
 
-        // TODO: Implement token refresh endpoint when needed
-        // For now, just acquire a new token
-        // The refresh token is valid for 30 days, so this is fine for most use cases
-        self.acquire_token().await
+        let configuration = Configuration {
+            base_path: auth::url(self.environment).into(),
+            ..Configuration::new()
+        };
+
+        let request = RefreshTokenRequest::new(refresh_token.to_string());
+        let response = auth_token_refresh_put(&configuration, request)
+            .await
+            .map_err(|e| AuthError::RefreshFailed(e.to_string()))?;
+
+        let expires_at =
+            Utc::now() + Duration::seconds(response.access_token_valid_for_seconds as i64);
+
+        Ok(AuthToken {
+            access_token: response.access_token,
+            refresh_token: Some(response.refresh_token),
+            expires_at,
+        })
     }
 }
 

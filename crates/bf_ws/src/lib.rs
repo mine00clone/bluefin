@@ -7,12 +7,22 @@
 //! - Raw message storage
 
 use bf_config::AppConfig;
-use bf_core::{AccountEvent, MarketEvent, RawWsMessage};
+use bf_core::{
+    AccountEvent, BalanceUpdateEvent, MarketEvent, MarketTradeEvent, OrderBookEvent,
+    OrderUpdateEvent, PositionUpdateEvent, RawWsMessage, TickerEvent, TradeUpdateEvent,
+};
+use bluefin_api::models::{
+    AccountDataStream, AccountSubscriptionMessage, MarketDataStreamName,
+    MarketSubscriptionMessage, MarketSubscriptionStreams, SubscriptionType,
+};
 use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
+use serde_json::Value;
 use std::path::Path;
 use thiserror::Error;
 use tokio::sync::mpsc;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::http::HeaderValue;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::{debug, error, info};
 
@@ -54,19 +64,21 @@ impl WsClient {
     /// Connect to account WebSocket stream
     pub async fn connect_account(
         &self,
-        _auth_token: &str,
+        auth_token: &str,
     ) -> Result<mpsc::Receiver<AccountEvent>, WsError> {
         let url = &self.config.ws.account_url;
         info!("Connecting to account stream: {}", url);
 
-        let (_tx, rx) = mpsc::channel(100);
+        let (tx, rx) = mpsc::channel(100);
+        let url = url.to_string();
+        let raw_path = self.raw_path.clone();
+        let auth_token = auth_token.to_string();
 
-        // TODO: Implement actual WebSocket connection
-        // 1. Connect to wss://stream.api.{env}.bluefin.io/ws/account
-        // 2. Send authentication
-        // 3. Handle incoming messages
-        // 4. Parse into AccountEvent
-        // 5. Send to channel
+        tokio::spawn(async move {
+            if let Err(e) = run_account_stream(url, auth_token, raw_path, tx).await {
+                error!("Account WS stream error: {}", e);
+            }
+        });
 
         Ok(rx)
     }
@@ -79,14 +91,15 @@ impl WsClient {
         let url = &self.config.ws.market_url;
         info!("Connecting to market stream: {} for {:?}", url, markets);
 
-        let (_tx, rx) = mpsc::channel(100);
+        let (tx, rx) = mpsc::channel(100);
+        let url = url.to_string();
+        let raw_path = self.raw_path.clone();
 
-        // TODO: Implement actual WebSocket connection
-        // 1. Connect to wss://stream.api.{env}.bluefin.io/ws/market
-        // 2. Subscribe to markets
-        // 3. Handle incoming messages
-        // 4. Parse into MarketEvent
-        // 5. Send to channel
+        tokio::spawn(async move {
+            if let Err(e) = run_market_stream(url, markets, raw_path, tx).await {
+                error!("Market WS stream error: {}", e);
+            }
+        });
 
         Ok(rx)
     }
@@ -118,6 +131,232 @@ impl WsClient {
 
         debug!("Saved raw WS message to: {:?}", path);
         Ok(())
+    }
+}
+
+async fn run_account_stream(
+    url: String,
+    auth_token: String,
+    raw_path: String,
+    sender: mpsc::Sender<AccountEvent>,
+) -> Result<(), WsError> {
+    let mut request = url
+        .into_client_request()
+        .map_err(|e| WsError::ConnectionFailed(e.to_string()))?;
+    request.headers_mut().insert(
+        "Authorization",
+        HeaderValue::from_str(&format!("Bearer {}", auth_token))
+            .map_err(|e| WsError::ConnectionFailed(e.to_string()))?,
+    );
+
+    let (ws_stream, _) = connect_async(request)
+        .await
+        .map_err(|e| WsError::ConnectionFailed(e.to_string()))?;
+    let (mut write, mut read) = ws_stream.split();
+
+    let subscription = AccountSubscriptionMessage::new(
+        SubscriptionType::Subscribe,
+        vec![
+            AccountDataStream::AccountUpdate,
+            AccountDataStream::AccountOrderUpdate,
+            AccountDataStream::AccountPositionUpdate,
+            AccountDataStream::AccountTradeUpdate,
+        ],
+    );
+    let subscribe_json =
+        serde_json::to_string(&subscription).map_err(|e| WsError::ParseError(e.to_string()))?;
+    write
+        .send(Message::Text(subscribe_json.into()))
+        .await
+        .map_err(|e| WsError::SendError(e.to_string()))?;
+
+    while let Some(msg) = read.next().await {
+        match msg {
+            Ok(Message::Text(text)) => {
+                let value: Value =
+                    serde_json::from_str(&text).unwrap_or(Value::String(text.to_string()));
+                save_raw_message_to(&raw_path, "account", &value).await?;
+                if let Some(evt) = parse_account_event(&value) {
+                    let _ = sender.send(evt).await;
+                }
+            }
+            Ok(Message::Ping(data)) => {
+                write
+                    .send(Message::Pong(data))
+                    .await
+                    .map_err(|e| WsError::SendError(e.to_string()))?;
+            }
+            Ok(Message::Close(_)) => break,
+            Ok(_) => {}
+            Err(e) => return Err(WsError::ReceiveError(e.to_string())),
+        }
+    }
+
+    Ok(())
+}
+
+async fn run_market_stream(
+    url: String,
+    markets: Vec<String>,
+    raw_path: String,
+    sender: mpsc::Sender<MarketEvent>,
+) -> Result<(), WsError> {
+    let request = url
+        .into_client_request()
+        .map_err(|e| WsError::ConnectionFailed(e.to_string()))?;
+    let (ws_stream, _) = connect_async(request)
+        .await
+        .map_err(|e| WsError::ConnectionFailed(e.to_string()))?;
+    let (mut write, mut read) = ws_stream.split();
+
+    let streams = markets
+        .into_iter()
+        .map(|market| {
+            MarketSubscriptionStreams::new(
+                market,
+                vec![
+                    MarketDataStreamName::Ticker,
+                    MarketDataStreamName::PartialDepth10,
+                    MarketDataStreamName::RecentTrade,
+                ],
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let subscription = MarketSubscriptionMessage::new(SubscriptionType::Subscribe, streams);
+    let subscribe_json =
+        serde_json::to_string(&subscription).map_err(|e| WsError::ParseError(e.to_string()))?;
+    write
+        .send(Message::Text(subscribe_json.into()))
+        .await
+        .map_err(|e| WsError::SendError(e.to_string()))?;
+
+    while let Some(msg) = read.next().await {
+        match msg {
+            Ok(Message::Text(text)) => {
+                let value: Value =
+                    serde_json::from_str(&text).unwrap_or(Value::String(text.to_string()));
+                save_raw_message_to(&raw_path, "market", &value).await?;
+                if let Some(evt) = parse_market_event(&value) {
+                    let _ = sender.send(evt).await;
+                }
+            }
+            Ok(Message::Ping(data)) => {
+                write
+                    .send(Message::Pong(data))
+                    .await
+                    .map_err(|e| WsError::SendError(e.to_string()))?;
+            }
+            Ok(Message::Close(_)) => break,
+            Ok(_) => {}
+            Err(e) => return Err(WsError::ReceiveError(e.to_string())),
+        }
+    }
+
+    Ok(())
+}
+
+async fn save_raw_message_to(
+    raw_path: &str,
+    stream_type: &str,
+    message: &Value,
+) -> Result<(), WsError> {
+    let raw_msg = RawWsMessage {
+        stream_type: stream_type.to_string(),
+        payload: message.clone(),
+        received_at: Utc::now(),
+    };
+
+    let timestamp = Utc::now().format("%Y%m%d_%H%M%S_%3f");
+    let filename = format!("{}_{}.json", stream_type, timestamp);
+    let path = Path::new(raw_path).join("ws").join(&filename);
+
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+
+    let content = serde_json::to_string_pretty(&raw_msg)
+        .map_err(|e| WsError::ParseError(e.to_string()))?;
+    tokio::fs::write(&path, content).await?;
+
+    debug!("Saved raw WS message to: {:?}", path);
+    Ok(())
+}
+
+fn parse_market_event(value: &Value) -> Option<MarketEvent> {
+    let event = value.get("event")?.as_str()?;
+    let payload = value.get("payload")?.clone();
+    let market = payload
+        .get("symbol")
+        .or_else(|| payload.get("market"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let received_at = Utc::now();
+
+    if event.contains("Ticker") {
+        return Some(MarketEvent::Ticker(TickerEvent {
+            market,
+            payload,
+            received_at,
+        }));
+    }
+    if event.contains("Depth") || event.contains("OrderBook") {
+        return Some(MarketEvent::OrderBook(OrderBookEvent {
+            market,
+            payload,
+            received_at,
+        }));
+    }
+    if event.contains("Trade") {
+        return Some(MarketEvent::Trade(MarketTradeEvent {
+            market,
+            payload,
+            received_at,
+        }));
+    }
+
+    None
+}
+
+fn parse_account_event(value: &Value) -> Option<AccountEvent> {
+    let event = value.get("event")?.as_str()?;
+    let payload = value.get("payload")?.clone();
+    let received_at = Utc::now();
+
+    match event {
+        "AccountOrderUpdate" => {
+            let order_value = payload.get("order").cloned().unwrap_or(payload);
+            match serde_json::from_value(order_value) {
+                Ok(order) => Some(AccountEvent::OrderUpdate(OrderUpdateEvent { order, received_at })),
+                Err(_) => None,
+            }
+        }
+        "AccountTradeUpdate" => {
+            let fill_value = payload.get("fill").cloned().unwrap_or(payload);
+            match serde_json::from_value(fill_value) {
+                Ok(fill) => Some(AccountEvent::TradeUpdate(TradeUpdateEvent { fill, received_at })),
+                Err(_) => None,
+            }
+        }
+        "AccountUpdate" => match serde_json::from_value(payload) {
+            Ok(balance) => Some(AccountEvent::BalanceUpdate(BalanceUpdateEvent { balance, received_at })),
+            Err(_) => None,
+        },
+        "AccountPositionUpdate" => {
+            let market = payload
+                .get("symbol")
+                .or_else(|| payload.get("market"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            Some(AccountEvent::PositionUpdate(PositionUpdateEvent {
+                market,
+                payload,
+                received_at,
+            }))
+        }
+        _ => None,
     }
 }
 

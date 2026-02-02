@@ -14,11 +14,11 @@
   - `crates/bf_app/`: `--run` で起動し、plan/market snapshot/normalization を通して dryrun/paper/live を切替
   - DoD: `create_order_raw.rs` 相当の動作を「アプリ経由」で再現できる
 
-- [ ] Issue D-3: Token refresh の実装（/auth/token/refresh）
+- [x] Issue D-3: Token refresh の実装（/auth/token/refresh）
   - `crates/bf_auth/src/lib.rs`: refresh endpoint を実装
   - DoD: access token expiry 時に refresh を優先し、失敗時のみ再取得
 
-- [ ] Issue D-4: WsClient の実装（examples ではなく本体）
+- [x] Issue D-4: WsClient の実装（examples ではなく本体）
   - `crates/bf_ws/src/lib.rs`: connect/subscribe/receive を実装し、Raw保存とイベント変換を提供
   - DoD: examples を使わず WsClient 経由で raw 保存ができる
 

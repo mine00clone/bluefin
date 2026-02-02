@@ -8,17 +8,23 @@
 
 use bf_config::AppConfig;
 use bf_core::{
-    AccountEvent, BalanceUpdateEvent, MarketEvent, MarketTradeEvent, OrderBookEvent,
-    OrderUpdateEvent, PositionUpdateEvent, RawWsMessage, TickerEvent, TradeUpdateEvent,
+    AccountEvent, Balance, BalanceUpdateEvent, MarketEvent, MarketTradeEvent, Order,
+    OrderBookEvent, OrderStatus, OrderType, OrderUpdateEvent, PositionUpdateEvent, RawWsMessage,
+    Side, TickerEvent, TimeInForce, TradeUpdateEvent,
 };
 use bluefin_api::models::{
-    AccountDataStream, AccountSubscriptionMessage, MarketDataStreamName,
-    MarketSubscriptionMessage, MarketSubscriptionStreams, SubscriptionType,
+    AccountDataStream, AccountOrderUpdate, AccountStreamMessage, AccountStreamMessagePayload,
+    AccountSubscriptionMessage, AccountTradeUpdate, ActiveOrderUpdate, MarketDataStreamName,
+    MarketSubscriptionMessage, MarketSubscriptionStreams, OrderStatus as ApiOrderStatus,
+    OrderTimeInForce as ApiTimeInForce, OrderType as ApiOrderType, SubscriptionType, Trade,
+    TradeSide as ApiTradeSide,
 };
-use chrono::Utc;
+use chrono::{TimeZone, Utc};
 use futures_util::{SinkExt, StreamExt};
+use rust_decimal::Decimal;
 use serde_json::Value;
 use std::path::Path;
+use std::str::FromStr;
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -176,7 +182,7 @@ async fn run_account_stream(
                 let value: Value =
                     serde_json::from_str(&text).unwrap_or(Value::String(text.to_string()));
                 save_raw_message_to(&raw_path, "account", &value).await?;
-                if let Some(evt) = parse_account_event(&value) {
+                for evt in parse_account_events(&value) {
                     let _ = sender.send(evt).await;
                 }
             }
@@ -319,44 +325,203 @@ fn parse_market_event(value: &Value) -> Option<MarketEvent> {
     None
 }
 
-fn parse_account_event(value: &Value) -> Option<AccountEvent> {
-    let event = value.get("event")?.as_str()?;
-    let payload = value.get("payload")?.clone();
-    let received_at = Utc::now();
+fn parse_account_events(value: &Value) -> Vec<AccountEvent> {
+    let parsed = match serde_json::from_value::<AccountStreamMessage>(value.clone()) {
+        Ok(msg) => msg,
+        Err(_) => return Vec::new(),
+    };
 
-    match event {
-        "AccountOrderUpdate" => {
-            let order_value = payload.get("order").cloned().unwrap_or(payload);
-            match serde_json::from_value(order_value) {
-                Ok(order) => Some(AccountEvent::OrderUpdate(OrderUpdateEvent { order, received_at })),
-                Err(_) => None,
-            }
-        }
-        "AccountTradeUpdate" => {
-            let fill_value = payload.get("fill").cloned().unwrap_or(payload);
-            match serde_json::from_value(fill_value) {
-                Ok(fill) => Some(AccountEvent::TradeUpdate(TradeUpdateEvent { fill, received_at })),
-                Err(_) => None,
-            }
-        }
-        "AccountUpdate" => match serde_json::from_value(payload) {
-            Ok(balance) => Some(AccountEvent::BalanceUpdate(BalanceUpdateEvent { balance, received_at })),
-            Err(_) => None,
+    let received_at = Utc::now();
+    match parsed {
+        AccountStreamMessage::AccountUpdate { payload, .. } => match payload {
+            AccountStreamMessagePayload::AccountUpdate(update) => update
+                .assets
+                .iter()
+                .filter_map(|asset| {
+                    let total = parse_e9_decimal(&asset.quantity_e9)?;
+                    let available = parse_e9_decimal(&asset.max_withdraw_quantity_e9)?;
+                    let balance = Balance::new(&asset.symbol, total, available);
+                    Some(AccountEvent::BalanceUpdate(BalanceUpdateEvent { balance, received_at }))
+                })
+                .collect(),
+            _ => Vec::new(),
         },
-        "AccountPositionUpdate" => {
-            let market = payload
+        AccountStreamMessage::AccountOrderUpdate { payload, .. } => match payload {
+            AccountStreamMessagePayload::AccountOrderUpdate(update) => match update {
+                AccountOrderUpdate::ActiveOrderUpdate(active) => {
+                    if let Some(order) = order_from_active_update(&active, received_at) {
+                        vec![AccountEvent::OrderUpdate(OrderUpdateEvent { order, received_at })]
+                    } else {
+                        Vec::new()
+                    }
+                }
+                AccountOrderUpdate::OrderCancellationUpdate(cancel) => {
+                    if let Some(order) = order_from_cancel_update(&cancel, received_at) {
+                        vec![AccountEvent::OrderUpdate(OrderUpdateEvent { order, received_at })]
+                    } else {
+                        Vec::new()
+                    }
+                }
+            },
+            _ => Vec::new(),
+        },
+        AccountStreamMessage::AccountTradeUpdate { payload, .. } => match payload {
+            AccountStreamMessagePayload::AccountTradeUpdate(AccountTradeUpdate { trade }) => {
+                if let Some(fill) = fill_from_trade(&trade) {
+                    vec![AccountEvent::TradeUpdate(TradeUpdateEvent { fill, received_at })]
+                } else {
+                    Vec::new()
+                }
+            }
+            _ => Vec::new(),
+        },
+        AccountStreamMessage::AccountPositionUpdate { payload, .. } => {
+            let payload_value = match serde_json::to_value(&payload) {
+                Ok(value) => value,
+                Err(_) => return Vec::new(),
+            };
+            let market = payload_value
                 .get("symbol")
-                .or_else(|| payload.get("market"))
+                .or_else(|| payload_value.get("market"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            Some(AccountEvent::PositionUpdate(PositionUpdateEvent {
+            vec![AccountEvent::PositionUpdate(PositionUpdateEvent {
                 market,
-                payload,
+                payload: payload_value,
                 received_at,
-            }))
+            })]
         }
-        _ => None,
+        _ => Vec::new(),
+    }
+}
+
+fn order_from_active_update(
+    update: &ActiveOrderUpdate,
+    received_at: chrono::DateTime<Utc>,
+) -> Option<Order> {
+    let price = parse_e9_decimal(&update.price_e9)?;
+    let size = parse_e9_decimal(&update.quantity_e9)?;
+    let filled = parse_e9_decimal(&update.filled_quantity_e9)?;
+
+    Some(Order {
+        order_hash: update.order_hash.clone(),
+        market: update.symbol.clone(),
+        side: map_side(update.side)?,
+        order_type: map_order_type(update.r#type),
+        price: Some(price),
+        size,
+        filled_size: filled,
+        status: map_order_status(update.status),
+        time_in_force: map_time_in_force(update.time_in_force),
+        reduce_only: update.reduce_only,
+        post_only: update.post_only,
+        client_order_id: update.client_order_id.clone(),
+        created_at: millis_to_datetime(update.created_at_millis).unwrap_or(received_at),
+        updated_at: millis_to_datetime(update.updated_at_millis).unwrap_or(received_at),
+    })
+}
+
+fn order_from_cancel_update(
+    update: &bluefin_api::models::OrderCancellationUpdate,
+    received_at: chrono::DateTime<Utc>,
+) -> Option<Order> {
+    let remaining = parse_e9_decimal(&update.remaining_quantity_e9)?;
+    // Cancellation updates do not include side/type/price; defaults are placeholders.
+    Some(Order {
+        order_hash: update.order_hash.clone(),
+        market: update.symbol.clone(),
+        side: Side::Buy,
+        order_type: OrderType::Limit,
+        price: None,
+        size: remaining,
+        filled_size: Decimal::ZERO,
+        status: OrderStatus::Cancelled,
+        time_in_force: TimeInForce::Gtc,
+        reduce_only: false,
+        post_only: false,
+        client_order_id: update.client_order_id.clone(),
+        created_at: millis_to_datetime(update.created_at_millis).unwrap_or(received_at),
+        updated_at: received_at,
+    })
+}
+
+fn fill_from_trade(trade: &Trade) -> Option<bf_core::Fill> {
+    let market = trade.symbol.clone().unwrap_or_default();
+    let order_hash = trade.order_hash.clone().unwrap_or_default();
+    if market.is_empty() || order_hash.is_empty() {
+        return None;
+    }
+    let price = parse_e9_decimal(&trade.price_e9)?;
+    let size = parse_e9_decimal(&trade.quantity_e9)?;
+    let fee = trade
+        .trading_fee_e9
+        .as_ref()
+        .and_then(|v| parse_e9_decimal(v))
+        .unwrap_or(Decimal::ZERO);
+    let fee_asset = trade
+        .trading_fee_asset
+        .clone()
+        .unwrap_or_else(|| "USD".to_string());
+
+    Some(bf_core::Fill {
+        fill_id: trade.id.clone(),
+        order_hash,
+        market,
+        side: map_side(trade.side)?,
+        price,
+        size,
+        fee,
+        fee_asset,
+        filled_at: millis_to_datetime(trade.executed_at_millis).unwrap_or_else(Utc::now),
+    })
+}
+
+fn parse_e9_decimal(raw: &str) -> Option<Decimal> {
+    let value = Decimal::from_str(raw).ok()?;
+    Some(value / Decimal::from(1_000_000_000u64))
+}
+
+fn millis_to_datetime(ms: i64) -> Option<chrono::DateTime<Utc>> {
+    Utc.timestamp_millis_opt(ms).single()
+}
+
+fn map_side(side: ApiTradeSide) -> Option<Side> {
+    match side {
+        ApiTradeSide::Long => Some(Side::Buy),
+        ApiTradeSide::Short => Some(Side::Sell),
+        ApiTradeSide::Unspecified => None,
+    }
+}
+
+fn map_time_in_force(tif: ApiTimeInForce) -> TimeInForce {
+    match tif {
+        ApiTimeInForce::Ioc => TimeInForce::Ioc,
+        ApiTimeInForce::Fok => TimeInForce::Fok,
+        ApiTimeInForce::Gtt | ApiTimeInForce::Unspecified => TimeInForce::Gtc,
+    }
+}
+
+fn map_order_type(order_type: ApiOrderType) -> OrderType {
+    match order_type {
+        ApiOrderType::Market
+        | ApiOrderType::StopMarket
+        | ApiOrderType::StopLossMarket
+        | ApiOrderType::TakeProfitMarket => OrderType::Market,
+        _ => OrderType::Limit,
+    }
+}
+
+fn map_order_status(status: ApiOrderStatus) -> OrderStatus {
+    match status {
+        ApiOrderStatus::Open | ApiOrderStatus::Standby => OrderStatus::Open,
+        ApiOrderStatus::PartiallyFilledOpen
+        | ApiOrderStatus::PartiallyFilledCanceled
+        | ApiOrderStatus::PartiallyFilledExpired => OrderStatus::Partial,
+        ApiOrderStatus::Filled => OrderStatus::Filled,
+        ApiOrderStatus::Cancelled => OrderStatus::Cancelled,
+        ApiOrderStatus::Expired => OrderStatus::Expired,
+        ApiOrderStatus::Unspecified => OrderStatus::Rejected,
     }
 }
 

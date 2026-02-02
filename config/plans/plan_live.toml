@@ -1,14 +1,14 @@
 # Phase 1 minimal plan: orders as array, string/integer only
 
 [[orders]]
-id = "btc_entry_1"
-market = "BTC-PERP"
+id = "sui_entry_1"
+market = "SUI-PERP"
 side = "buy"
 order_type = "limit"
 price_mode = "offset_bps"
 price_bps = "-300"
 size_mode = "quantity"
-quantity = "1000000" # e9 (0.001 BTC)
+quantity = "4461895413" # e9 (~$5 notional at lastPriceE9=1120600000)
 tif = "GTC"
 post_only = true
 reduce_only = false

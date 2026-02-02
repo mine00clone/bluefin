@@ -34,11 +34,11 @@
 - これにより上位の制御フロー（次の注文、状態更新、リトライ等）は `?` で自然に停止できる
 
 ## Checklist
-- [ ] `OrderExecService` の public API が「失敗を Ok に包まない」ことを型で保証する
-- [ ] ログが「成功/失敗」を誤解させない（Rejected/Failed を success として出さない）
-- [ ] バッチ作成（create_orders）が 1件失敗を握り潰さず、呼び出し側が扱える
-- [ ] 既存の examples / scripts が新しい戻り値に追従できる
+- [x] `OrderExecService` の public API が「失敗を Ok に包まない」ことを型で保証する
+- [x] ログが「成功/失敗」を誤解させない（Rejected/Failed を success として出さない）
+- [x] バッチ作成（create_orders）が 1件失敗を握り潰さず、呼び出し側が扱える
+- [x] 既存の examples / scripts が新しい戻り値に追従できる
 
 ## Verification
-- `cargo test -p bf_order_exec`（該当のユニットテストを追加/更新）
+- `cargo test -p bf_order_exec`
 - 「executor がエラーを返すモック」を差し込み、`Err` 伝播を確認

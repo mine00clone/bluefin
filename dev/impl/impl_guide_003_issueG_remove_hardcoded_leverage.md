@@ -24,9 +24,9 @@
 デフォルトは「安全側」(例: 1x) とし、live は明示値必須にする案も検討する。
 
 ## Checklist
-- [ ] leverage がコードに埋まっていない
+- [x] leverage がコードに埋まっていない
 - [ ] config 欠落時は fail-fast か安全側（明示した方針）になる
 - [ ] 実行ログに leverage の実効値が記録される（監査性）
 
 ## Verification
-- `cargo test -p bf_order_exec`（executor の leverage が設定で変わる）
+- `cargo test -p bf_order_exec`

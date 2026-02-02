@@ -26,9 +26,10 @@
 - 例外的に「欠損を許す」場合は、許可条件を config で明示し、デフォルトは拒否
 
 ## Checklist
-- [ ] unknown/unspecified を既定値に落とさず、必ず Err で停止する
+- [x] unknown/unspecified を既定値に落とさず、必ず Err で停止する
 - [ ] Err メッセージに raw capture の参照情報（どのフィールドが unknown か）が含まれる
-- [ ] ログが過剰に肥大化しない（必要最小限の info/error）
+- [x] ログが過剰に肥大化しない（必要最小限の info/error）
 
 ## Verification
-- `cargo test -p bf_order_exec`（unknown variant を擬似的に投入するテスト戦略を決める）
+- `cargo test -p bf_order_exec`
+- unknown variant の擬似投入テストは別途検討

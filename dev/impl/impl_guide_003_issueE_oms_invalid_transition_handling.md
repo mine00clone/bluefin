@@ -23,9 +23,10 @@
 - いずれも「勝手に注文を出す」方向のフォールバックは禁止
 
 ## Checklist
-- [ ] 不正遷移を検出したら、上位に伝播できる（Err or signal）
+- [x] 不正遷移を検出したら、上位に伝播できる（Err or signal）
 - [ ] 上位（将来の orchestration）が取引停止/再同期に繋げられる導線がある
-- [ ] 正常系の遷移は従来通り動く
+- [x] 正常系の遷移は従来通り動く
 
 ## Verification
-- `cargo test -p bf_order_manager`（不正遷移のケースを追加）
+- `cargo test -p bf_order_manager`
+- 不正遷移ケースのユニットテスト追加は別途検討

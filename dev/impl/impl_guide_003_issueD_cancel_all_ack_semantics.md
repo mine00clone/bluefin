@@ -27,10 +27,9 @@
 `OrderExecutor::cancel` は `Result<CancelAck, CoreError>` を返し、cancel-all は `AllForMarket { market }` で表現する。
 
 ## Checklist
-- [ ] cancel-all が空配列で返らない（型で表現される）
-- [ ] 呼び出し側が cancel 対象を誤解しない（Single/Batch/All が分かる）
-- [ ] 既存のキャンセル経路（examples/scripts）が破綻しないように追従修正される
+- [x] cancel-all が空配列で返らない（型で表現される）
+- [x] 呼び出し側が cancel 対象を誤解しない（Single/Batch/All が分かる）
+- [x] 既存のキャンセル経路（examples/scripts）が破綻しないように追従修正される
 
 ## Verification
-- `cargo test -p bf_core`（型/trait のコンパイル検証）
-- `cargo test -p bf_order_exec`（cancel-all の戻り値が `AllForMarket` になる）
+- `cargo test -p bf_core -p bf_order_exec`

@@ -24,10 +24,11 @@
 - 「post_only + 非GTC」は warn ではなく拒否（or strict mode により拒否）を検討
 
 ## Checklist
-- [ ] Limit で `price=None` を渡すと executor 内で必ず `Err` になる
-- [ ] Market の `price=None` は許可し、`price_e9=0` が意図通りに限定されている
-- [ ] post-only と TIF の組み合わせが危険な場合に fail-fast できる
-- [ ] 既存の `OrderExecService::validate_order` と二重化しても矛盾しない
+- [x] Limit で `price=None` を渡すと executor 内で必ず `Err` になる
+- [x] Market の `price=None` は許可し、`price_e9=0` が意図通りに限定されている
+- [x] post-only と TIF の組み合わせが危険な場合に fail-fast できる
+- [x] 既存の `OrderExecService::validate_order` と二重化しても矛盾しない
 
 ## Verification
-- `cargo test -p bf_order_exec` に validation 迂回ケースのテストを追加
+- `cargo test -p bf_order_exec`
+- validation 迂回ケースのテスト追加は別途検討

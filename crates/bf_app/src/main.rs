@@ -4,8 +4,8 @@ use anyhow::Result;
 use bf_core::{MarketEvent, Strategy, StrategyContext};
 use bf_order_exec::{normalize_intent, NormalizationPolicy, PolicyMode, RoundingMode};
 use bf_strategies::ExampleStrategy;
+use bf_ws::extract_last_price_e9;
 use chrono::Utc;
-use rust_decimal::prelude::FromPrimitive;
 use rust_decimal::Decimal;
 use tracing::{error, info, Level};
 use tracing_subscriber::FmtSubscriber;
@@ -126,22 +126,12 @@ fn extract_last_price(event: &MarketEvent) -> anyhow::Result<Option<Decimal>> {
         MarketEvent::Trade(e) => &e.payload,
         MarketEvent::Ticker(e) => &e.payload,
     };
-    if let Some(value) = payload.get("last_price_e9") {
-        if let Some(s) = value.as_str() {
-            let e9 = s.parse::<i128>()?;
+    if let Some(value) = extract_last_price_e9(payload) {
+        if let Ok(e9) = value.parse::<i128>() {
             return Ok(Some(Decimal::from(e9) / Decimal::from(1_000_000_000u64)));
         }
-        if let Some(n) = value.as_i64() {
-            return Ok(Some(Decimal::from(n) / Decimal::from(1_000_000_000u64)));
-        }
-    }
-    if let Some(value) = payload.get("last_price") {
-        if let Some(s) = value.as_str() {
-            let p = s.parse::<Decimal>()?;
+        if let Ok(p) = value.parse::<Decimal>() {
             return Ok(Some(p));
-        }
-        if let Some(n) = value.as_f64() {
-            return Ok(Some(Decimal::from_f64(n).ok_or_else(|| anyhow::anyhow!("Invalid last_price"))?));
         }
     }
     Ok(None)

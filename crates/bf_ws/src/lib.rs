@@ -592,3 +592,24 @@ impl RawWsConnection {
         Ok(messages)
     }
 }
+
+/// Extract last_price_e9 from a raw WS payload (market stream).
+pub fn extract_last_price_e9(payload: &serde_json::Value) -> Option<String> {
+    if let Some(value) = payload.get("last_price_e9") {
+        if let Some(s) = value.as_str() {
+            return Some(s.to_string());
+        }
+        if let Some(n) = value.as_i64() {
+            return Some(n.to_string());
+        }
+    }
+    if let Some(value) = payload.get("last_price") {
+        if let Some(s) = value.as_str() {
+            return Some(s.to_string());
+        }
+        if let Some(n) = value.as_f64() {
+            return Some(format!("{}", n));
+        }
+    }
+    None
+}

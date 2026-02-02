@@ -15,13 +15,13 @@ bf_config = { workspace = true }
 bf_core = { workspace = true }
 bf_auth = { workspace = true }
 bf_rest = { workspace = true }
-bf_ws = { workspace = true }
 bf_balance = { workspace = true }
 bf_order_exec = { workspace = true }
 bf_order_manager = { workspace = true }
 bf_history = { workspace = true }
 bf_storage_sqlite = { workspace = true }
 bf_strategies = { workspace = true }
+bf_ws = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

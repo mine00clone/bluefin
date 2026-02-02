@@ -7,8 +7,10 @@
 //! - ACK vs confirmation separation
 
 mod bluefin_executor;
+mod normalize;
 
 pub use bluefin_executor::BluefinOrderExecutor;
+pub use normalize::{normalize_intent, NormalizationPolicy, PolicyMode, RoundingMode};
 
 use bf_core::{CancelAck, CancelRequest, OrderExecutor, OrderRequest};
 use std::sync::Arc;

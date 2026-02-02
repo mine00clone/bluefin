@@ -25,7 +25,7 @@
 
 ## Checklist
 - [x] leverage がコードに埋まっていない
-- [ ] config 欠落時は fail-fast か安全側（明示した方針）になる
+- [x] config 欠落時は fail-fast か安全側（明示した方針）になる
 - [ ] 実行ログに leverage の実効値が記録される（監査性）
 
 ## Verification

@@ -22,7 +22,7 @@
 ## Checklist
 - [x] snapshot 空なら plan 実行が停止する（デフォルト）
 - [x] 例外許容は行わない（常に Err）
-- [ ] エラーメッセージが運用で原因特定しやすい（どの snapshot が空か）
+- [x] エラーメッセージが運用で原因特定しやすい（どの snapshot が空か）
 
 ## Verification
 - `cargo test -p bf_config`

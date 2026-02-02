@@ -24,7 +24,7 @@
 
 ## Checklist
 - [x] 不正遷移を検出したら、上位に伝播できる（Err or signal）
-- [ ] 上位（将来の orchestration）が取引停止/再同期に繋げられる導線がある
+- [x] 上位（将来の orchestration）が取引停止/再同期に繋げられる導線がある
 - [x] 正常系の遷移は従来通り動く
 
 ## Verification

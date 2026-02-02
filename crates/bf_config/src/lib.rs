@@ -244,7 +244,7 @@ pub fn load_run_config(path: &Path) -> Result<RuntimeConfig, ConfigError> {
 
     let market_snapshot = load_market_snapshot(&markets_snapshot_path)?;
 
-    validate_plan_against_snapshot(&plan, &market_snapshot)?;
+    validate_plan_against_snapshot(&plan, &market_snapshot, &markets_snapshot_path)?;
 
     let runtime = RuntimeConfig {
         run,
@@ -262,10 +262,14 @@ pub fn load_run_config(path: &Path) -> Result<RuntimeConfig, ConfigError> {
 fn validate_plan_against_snapshot(
     plan: &PlanConfig,
     snapshot: &bf_core::MarketSnapshot,
+    snapshot_path: &Path,
 ) -> Result<(), ConfigError> {
     if snapshot.markets.is_empty() {
         return Err(ConfigError::EnvError(
-            "markets snapshot is empty".to_string(),
+            format!(
+                "markets snapshot is empty: {}",
+                snapshot_path.display()
+            ),
         ));
     }
     for order in &plan.orders {

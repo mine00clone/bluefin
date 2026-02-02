@@ -46,7 +46,10 @@ async fn main() -> anyhow::Result<()> {
     println!("Environment: {:?}\n", config.env.name);
 
     // Create executor
-    let executor = BluefinOrderExecutor::new(token_manager.clone(), 10);
+    let executor = BluefinOrderExecutor::new(
+        token_manager.clone(),
+        config.orders.default_leverage,
+    );
 
     // Create a limit order request
     // Price is set very low to avoid execution (just for testing)

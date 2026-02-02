@@ -207,7 +207,7 @@ impl BluefinOrderExecutor {
             OrderSide::Short => Side::Sell,
             OrderSide::Unspecified => {
                 return Err(CoreError::InvalidRequest(
-                    "OrderSide is unspecified".to_string(),
+                    "OrderSide is unspecified; check raw capture for signed_fields.side".to_string(),
                 ));
             }
         };
@@ -216,20 +216,25 @@ impl BluefinOrderExecutor {
             SdkOrderType::Market => OrderType::Market,
             _ => {
                 return Err(CoreError::InvalidRequest(
-                    "Unknown order type in signed request".to_string(),
+                    "Unknown order type in signed request; check raw capture for type".to_string(),
                 ));
             }
         };
         let time_in_force = signed_request
             .time_in_force
-            .ok_or_else(|| CoreError::InvalidRequest("time_in_force is missing".to_string()))?;
+            .ok_or_else(|| {
+                CoreError::InvalidRequest(
+                    "time_in_force is missing; check raw capture for time_in_force".to_string(),
+                )
+            })?;
         let time_in_force = match time_in_force {
             OrderTimeInForce::Gtt => TimeInForce::Gtc,
             OrderTimeInForce::Ioc => TimeInForce::Ioc,
             OrderTimeInForce::Fok => TimeInForce::Fok,
             _ => {
                 return Err(CoreError::InvalidRequest(
-                    "Unknown time_in_force in signed request".to_string(),
+                    "Unknown time_in_force in signed request; check raw capture for time_in_force"
+                        .to_string(),
                 ));
             }
         };

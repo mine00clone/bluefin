@@ -74,7 +74,7 @@ impl<R: OrderRepository> OrderManager<R> {
         if let Some(existing) = state.get(&order.order_hash) {
             if !self.is_valid_transition(existing.status, order.status) {
                 warn!(
-                    "Invalid state transition for {}: {:?} -> {:?}",
+                    "Invalid state transition for {}: {:?} -> {:?}. Stop trading and resync.",
                     order.order_hash, existing.status, order.status
                 );
                 return Err(OmsError::InvalidTransition {

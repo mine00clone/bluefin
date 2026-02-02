@@ -27,7 +27,7 @@
 
 ## Checklist
 - [x] unknown/unspecified を既定値に落とさず、必ず Err で停止する
-- [ ] Err メッセージに raw capture の参照情報（どのフィールドが unknown か）が含まれる
+- [x] Err メッセージに raw capture の参照情報（どのフィールドが unknown か）が含まれる
 - [x] ログが過剰に肥大化しない（必要最小限の info/error）
 
 ## Verification

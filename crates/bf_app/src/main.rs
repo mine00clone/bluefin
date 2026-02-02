@@ -67,7 +67,7 @@ async fn main() -> Result<()> {
     }
     let ctx = StrategyContext { now: Utc::now() };
     let dummy_event = MarketEvent::Ticker(bf_core::TickerEvent {
-        market: "BTC-PERP".to_string(),
+        market: "SUI-PERP".to_string(),
         payload: serde_json::json!({"last_price_e9": "100000000000000"}),
         received_at: Utc::now(),
     });

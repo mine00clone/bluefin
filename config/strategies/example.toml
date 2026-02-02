@@ -3,7 +3,7 @@
 [strategy]
 id = "example"
 enabled = true
-market = "BTC-PERP"
+market = "SUI-PERP"
 side = "BUY"
 order_type = "LIMIT"
 # 3% below market

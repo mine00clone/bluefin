@@ -12,6 +12,7 @@
 //!   cargo run --example private_read -p bf_rest
 
 use bf_config::{AppConfig, Environment as BfEnvironment};
+use bf_core::redact_id;
 use bluefin_api::apis::{
     account_data_api::get_account_details,
     configuration::Configuration,
@@ -51,15 +52,11 @@ async fn main() -> anyhow::Result<()> {
     // Check key format
     if private_key_hex.starts_with("suiprivk") || private_key_hex.len() != 64 {
         println!("ERROR: Private key format issue.");
-        println!("\nFor testing on staging, use the SDK's test account:");
-        if let Some(test_keys) = environment.test_keys() {
-            println!("  BLUEFIN_PRIVATE_KEY={}", test_keys.private_key);
-            println!("  BLUEFIN_ACCOUNT_ADDRESS={}", test_keys.address);
-        }
+        println!("\nFor testing on staging, use the SDK's test account.");
         return Ok(());
     }
 
-    println!("Account: {}", account_address);
+    println!("Account: {}", redact_id(&account_address));
     println!("Environment: {:?}", config.env.name);
 
     // Create raw directory
@@ -97,35 +94,7 @@ async fn main() -> anyhow::Result<()> {
 
     match get_account_details(&account_config, Some(account_address.as_str())).await {
         Ok(account_details) => {
-            println!("Account found!");
-            println!("  Can trade: {}", account_details.can_trade);
-            println!("  Cross effective balance: {} (e9)", account_details.cross_effective_balance_e9);
-            println!("  Margin available: {} (e9)", account_details.margin_available_e9);
-            println!("  Total account value: {} (e9)", account_details.total_account_value_e9);
-
-            // Show assets (balances)
-            println!("  Assets ({}):", account_details.assets.len());
-            for asset in &account_details.assets {
-                println!("    {} - Quantity: {}, Effective: {}, Max Withdraw: {}",
-                    asset.symbol,
-                    asset.quantity_e9,
-                    asset.effective_balance_e9,
-                    asset.max_withdraw_quantity_e9
-                );
-            }
-
-            // Show positions
-            println!("  Positions ({}):", account_details.positions.len());
-            for pos in &account_details.positions {
-                println!("    {} - Side: {:?}, Size: {}, Entry: {}, Unrealized PnL: {}",
-                    pos.symbol,
-                    pos.side,
-                    pos.size_e9,
-                    pos.avg_entry_price_e9,
-                    pos.unrealized_pnl_e9
-                );
-            }
-
+            println!("Account details fetched.");
             // Save raw response
             let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
             let output_path = raw_dir.join(format!("account_details_{}.json", timestamp));
@@ -145,21 +114,6 @@ async fn main() -> anyhow::Result<()> {
     match get_open_orders(&trade_config, None).await {
         Ok(open_orders) => {
             println!("Found {} open orders", open_orders.len());
-
-            for (i, order) in open_orders.iter().take(5).enumerate() {
-                println!("  Order #{}: {:?} {} {} @ {} (status: {:?})",
-                    i + 1,
-                    order.side,
-                    order.quantity_e9,
-                    order.symbol,
-                    order.price_e9,
-                    order.status
-                );
-            }
-            if open_orders.len() > 5 {
-                println!("  ... and {} more", open_orders.len() - 5);
-            }
-
             // Save raw response
             let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
             let output_path = raw_dir.join(format!("open_orders_{}.json", timestamp));

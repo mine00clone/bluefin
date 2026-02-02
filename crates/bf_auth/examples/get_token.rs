@@ -8,6 +8,7 @@
 //!   cargo run --example get_token -p bf_auth -- --run config/run/run_live.toml
 
 use bf_config::{load_run_config, Environment as BfEnvironment};
+use bf_core::redact_id;
 use bluefin_api::models::LoginRequest;
 use bluefin_pro::prelude::*;
 use chrono::Utc;
@@ -69,7 +70,7 @@ async fn main() -> anyhow::Result<()> {
         .account_address
         .expect("BLUEFIN_ACCOUNT_ADDRESS not set in .env");
 
-    println!("Account address: {}", account_address);
+    println!("Account address: {}", redact_id(&account_address));
     println!("Environment: {:?}", runtime.profile.env.name);
     println!("Auth URL: {}", auth::url(environment));
 

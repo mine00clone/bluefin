@@ -8,6 +8,7 @@
 //!   cargo run --example cancel_orders_raw -p bf_rest -- --run config/run/run_live.toml --market BTC-PERP --all
 
 use bf_config::{load_run_config, Environment as BfEnvironment};
+use bf_core::redact_id;
 use bluefin_api::apis::{configuration::Configuration, trade_api::cancel_orders};
 use bluefin_api::models::{CancelOrdersRequest, LoginRequest};
 use bluefin_pro::prelude::*;
@@ -84,7 +85,7 @@ async fn main() -> anyhow::Result<()> {
         return Err(anyhow::anyhow!("Provide --hash or --all"));
     }
 
-    println!("Account: {}", account_address);
+    println!("Account: {}", redact_id(&account_address));
     println!("Environment: {:?}", runtime.profile.env.name);
     println!("Market: {}", market);
 

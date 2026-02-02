@@ -46,4 +46,8 @@
 - [x] raw を保存し、目視確認できる（raw dump example + script 追加）
 - [x] snapshot を生成し、実行時通信なしで読み込める（generator tool 追加）
 - [ ] Executor が tick/step/min を使って fail-fast or snap できる
-- [ ] examples が「実行時に exchange/info を取らない」状態になった
+- [x] examples が「実行時に exchange/info を取らない」状態になった
+
+## 実行ログ
+- raw: data/raw/rest/exchange_info_20260202_005539.json
+- snapshot: config/markets/snapshot.json

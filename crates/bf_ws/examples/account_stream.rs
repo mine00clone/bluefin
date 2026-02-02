@@ -9,9 +9,9 @@
 //!   cargo run --example account_stream -p bf_ws -- --run config/run/run_live.toml
 
 use bf_config::{load_run_config, Environment as BfEnvironment};
+use bf_core::redact_id;
 use bluefin_api::models::{
-    AccountDataStream, AccountStreamMessage, AccountSubscriptionMessage, LoginRequest,
-    SubscriptionType,
+    AccountDataStream, AccountSubscriptionMessage, LoginRequest, SubscriptionType,
 };
 use bluefin_pro::prelude::*;
 use chrono::Utc;
@@ -68,7 +68,7 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    println!("Account: {}", account_address);
+    println!("Account: {}", redact_id(&account_address));
     println!("Environment: {:?}", runtime.profile.env.name);
 
     // Step 1: Authenticate to get token
@@ -141,14 +141,7 @@ async fn main() -> anyhow::Result<()> {
                         let text_str = text.to_string();
 
                         if message_count <= 5 {
-                            if let Ok(account_msg) = serde_json::from_str::<AccountStreamMessage>(&text_str) {
-                                println!("Message #{}: {:?}", message_count, account_msg);
-                            } else if let Ok(json) = serde_json::from_str::<Value>(&text_str) {
-                                println!("Message #{}: {}", message_count,
-                                    serde_json::to_string(&json).unwrap_or_else(|_| text_str.clone()));
-                            } else {
-                                println!("Message #{}: {}", message_count, text_str);
-                            }
+                            println!("Message #{} received (see raw file)", message_count);
                         } else if message_count == 6 {
                             println!("... (logging to file)");
                         }

@@ -17,4 +17,4 @@
 ## Checklist
 - [x] `--run config/run/run_live.toml` の指定だけで examples が動く（raw系/WS系）
 - [x] 生成した raw は data/raw に保存される（gitignore）
-- [ ] ログ出力に order id / account info が残らない（redaction）
+- [x] ログ出力に order id / account info が残らない（redaction）

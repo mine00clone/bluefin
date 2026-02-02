@@ -7,6 +7,7 @@
 //!   cargo run --example account_details_raw -p bf_rest -- --run config/run/run_live.toml
 
 use bf_config::{load_run_config, Environment as BfEnvironment};
+use bf_core::redact_id;
 use bluefin_api::apis::{account_data_api::get_account_details, configuration::Configuration};
 use bluefin_api::models::LoginRequest;
 use bluefin_pro::prelude::*;
@@ -59,7 +60,7 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    println!("Account: {}", account_address);
+    println!("Account: {}", redact_id(&account_address));
     println!("Environment: {:?}", runtime.profile.env.name);
 
     // Create raw directory

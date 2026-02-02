@@ -19,6 +19,7 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
 use sui_sdk_types::SignatureScheme;
+use reqwest::header::DATE;
 
 const E9: u64 = 1_000_000_000;
 
@@ -78,7 +79,7 @@ fn snap_to_step(value: u64, step: u64) -> u64 {
     value - (value % step)
 }
 
-fn read_last_price_from_ws_raw(path: &Path, market: &str) -> anyhow::Result<Option<u64>> {
+fn read_last_price_from_ws_raw(path: &Path, market: &str) -> anyhow::Result<Option<(u64, i64)>> {
     let content = fs::read_to_string(path)?;
     let values: Vec<Value> = serde_json::from_str(&content)?;
     for value in values.iter().rev() {
@@ -90,14 +91,34 @@ fn read_last_price_from_ws_raw(path: &Path, market: &str) -> anyhow::Result<Opti
         if symbol != market {
             continue;
         }
+        let updated_at = payload
+            .get("updatedAtMillis")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(Utc::now().timestamp_millis());
         if let Some(price) = payload.get("lastPriceE9").and_then(|v| v.as_str()) {
-            return Ok(price.parse::<u64>().ok());
+            return Ok(price.parse::<u64>().ok().map(|p| (p, updated_at)));
         }
         if let Some(price) = payload.get("marketPriceE9").and_then(|v| v.as_str()) {
-            return Ok(price.parse::<u64>().ok());
+            return Ok(price.parse::<u64>().ok().map(|p| (p, updated_at)));
         }
         if let Some(price) = payload.get("markPriceE9").and_then(|v| v.as_str()) {
-            return Ok(price.parse::<u64>().ok());
+            return Ok(price.parse::<u64>().ok().map(|p| (p, updated_at)));
+        }
+    }
+    Ok(None)
+}
+
+async fn get_server_time_millis(
+    client: &reqwest::Client,
+    base_url: &str,
+    token: &str,
+) -> anyhow::Result<Option<i64>> {
+    let url = format!("{}/api/v1/trade/openOrders", base_url);
+    let response = client.get(&url).bearer_auth(token).send().await?;
+    if let Some(date) = response.headers().get(DATE) {
+        let date_str = date.to_str().unwrap_or("");
+        if let Ok(parsed) = chrono::DateTime::parse_from_rfc2822(date_str) {
+            return Ok(Some(parsed.timestamp_millis()));
         }
     }
     Ok(None)
@@ -142,6 +163,12 @@ async fn main() -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
+    let client = reqwest::Client::new();
+    let server_time = get_server_time_millis(&client, &runtime.profile.rest.trade_url, &token_response.access_token)
+        .await
+        .ok()
+        .flatten();
+
     for plan_order in &runtime.plan.orders {
         let market = plan_order.market.clone();
         let meta = snapshot
@@ -153,7 +180,7 @@ async fn main() -> anyhow::Result<()> {
         let tif = parse_tif(&plan_order.tif)?;
 
         let ws_raw_path = Path::new(&runtime.app.paths.raw_path).join("ws_market_raw.json");
-        let last_price_e9 = read_last_price_from_ws_raw(&ws_raw_path, &market)?
+        let (last_price_e9, updated_at_millis) = read_last_price_from_ws_raw(&ws_raw_path, &market)?
             .ok_or_else(|| anyhow::anyhow!("Missing lastPriceE9 in ws raw: {}", ws_raw_path.display()))?;
 
         let (mut price_e9_u64, price_is_set) = if matches!(order_type, SdkOrderType::Limit) {
@@ -203,7 +230,10 @@ async fn main() -> anyhow::Result<()> {
             return Err(anyhow::anyhow!("Order size below minimum"));
         }
 
-        let signed_at_millis = Utc::now().timestamp_millis();
+        let now_millis = Utc::now().timestamp_millis();
+        let signed_at_millis = server_time
+            .unwrap_or(now_millis)
+            .max(updated_at_millis);
         let expires_at_millis = signed_at_millis + 6 * 60 * 1000;
 
         let signed_fields = CreateOrderRequestSignedFields {
@@ -236,7 +266,6 @@ async fn main() -> anyhow::Result<()> {
         let signed_request = order_request.sign(private_key, SignatureScheme::Ed25519)?;
 
         let url = format!("{}/api/v1/trade/orders", runtime.profile.rest.trade_url);
-        let client = reqwest::Client::new();
         let response = client
             .post(&url)
             .bearer_auth(&token_response.access_token)

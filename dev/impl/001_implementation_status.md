@@ -293,3 +293,6 @@ crates/
   - bf_auth実装完了
   - bf_order_exec実装完了
   - API動作確認完了
+- 2026-02-02: impl_guide_002 (A/B/C/E) 反映 + market snapshot 生成
+  - `cargo test --workspace` を実行し全テストPASS
+  - exchange_info raw → snapshot 生成フロー追加

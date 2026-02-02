@@ -43,7 +43,7 @@
     - ファイル存在チェック、パスの妥当性チェック
 
 ## Checklist
-- [ ] config/run/*.toml で「どの設定を使うか」切り替えられる
-- [ ] Live 実行は requires_env を満たさないと起動しない
-- [ ] URL/銘柄/注文条件がコードに埋まっていない
-- [ ] 既存 examples が RuntimeConfig を受け取れる形に更新できる準備ができた
+- [x] config/run/*.toml で「どの設定を使うか」切り替えられる
+- [x] Live 実行は requires_env を満たさないと起動しない
+- [x] URL/銘柄/注文条件がコードに埋まっていない（run/plan/snapshot 駆動の系統）
+- [ ] 既存 examples が RuntimeConfig を受け取れる形に統一（legacy example を整理する）

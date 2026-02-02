@@ -26,6 +26,12 @@ async fn main() -> Result<()> {
     let config = bf_config::AppConfig::load("config")?;
     info!("Loaded configuration for environment: {:?}", config.env.name);
 
+    // Load runtime config (run.toml)
+    let run_config_path =
+        std::env::var("RUN_CONFIG").unwrap_or_else(|_| "config/run/run_paper.toml".to_string());
+    let runtime = bf_config::load_run_config(std::path::Path::new(&run_config_path))?;
+    info!("Loaded runtime config: {}", run_config_path);
+
     // Load secrets
     let _secrets = bf_config::AppConfig::load_secrets()?;
     info!("Loaded authentication secrets");
@@ -49,7 +55,13 @@ async fn main() -> Result<()> {
     // 3. Periodic REST reconciliation
     // NOTE: If OrderManager::apply_update returns Err (invalid transition),
     //       stop trading and trigger resync/reconcile before continuing.
-    let mut strategies: Vec<Box<dyn Strategy>> = vec![Box::new(ExampleStrategy::new("BTC-PERP"))];
+    let mut strategies: Vec<Box<dyn Strategy>> = Vec::new();
+    if let Some(strategy_config) = &runtime.strategy {
+        if strategy_config.strategy.enabled {
+            let strategy = ExampleStrategy::from_config(strategy_config)?;
+            strategies.push(Box::new(strategy));
+        }
+    }
     let ctx = StrategyContext { now: Utc::now() };
     let dummy_event = MarketEvent::Ticker(bf_core::TickerEvent {
         market: "BTC-PERP".to_string(),

@@ -42,3 +42,4 @@
 - Issue D: Intent → Gate(Plan/Risk) → Normalize → Send（bf_order_exec など）
 - Issue E: examples/scripts の更新（market実行時fetch撤廃、raw保存徹底）
 - Issue F: テスト/fixtures/ドキュメント整備
+- Issue H: Strategy スケルトン（Intent生成のみ）+ 設定差し替え導線

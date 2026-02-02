@@ -6,9 +6,9 @@
 //! - Save raw messages
 //!
 //! Usage:
-//!   cargo run --example market_stream -p bf_ws
+//!   cargo run --example market_stream -p bf_ws -- --run config/run/run_live.toml
 
-use bf_config::{AppConfig, Environment as BfEnvironment};
+use bf_config::{load_run_config, Environment as BfEnvironment};
 use bluefin_api::models::{
     MarketDataStreamName, MarketStreamMessage, MarketSubscriptionMessage,
     MarketSubscriptionStreams, SubscriptionType,
@@ -17,6 +17,7 @@ use bluefin_pro::prelude::*;
 use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
+use std::env;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
@@ -31,29 +32,42 @@ fn to_sdk_env(env: &BfEnvironment) -> Environment {
     }
 }
 
+fn parse_run_arg() -> String {
+    let mut args = env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--run" {
+            if let Some(val) = args.next() {
+                return val;
+            }
+        }
+    }
+    "config/run/run_live.toml".to_string()
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     println!("=== Bluefin WebSocket Market Stream Test (SDK) ===\n");
 
-    let config = AppConfig::load("config")?;
-    let environment = to_sdk_env(&config.env.name);
-    let symbol = config
-        .markets
-        .symbols
+    let run_path = parse_run_arg();
+    let runtime = load_run_config(Path::new(&run_path))?;
+    let environment = to_sdk_env(&runtime.profile.env.name);
+
+    let symbol = runtime
+        .plan
+        .orders
         .first()
-        .map(String::as_str)
+        .map(|o| o.market.as_str())
         .unwrap_or("BTC-PERP");
 
-    let raw_dir = Path::new("data/raw/ws");
-    fs::create_dir_all(raw_dir)?;
+    let raw_dir = Path::new(&runtime.app.paths.raw_path).join("ws");
+    fs::create_dir_all(&raw_dir)?;
 
     let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
     let output_path = raw_dir.join(format!("market_stream_{}.ndjson", timestamp));
     let mut output_file = File::create(&output_path)?;
 
-    // Use SDK's URL helper for environment-aware WebSocket URL
     let ws_url = ws::market::url(environment);
-    println!("Environment: {:?}", config.env.name);
+    println!("Environment: {:?}", runtime.profile.env.name);
     println!("WebSocket URL: {}", ws_url);
     println!("Symbol: {}", symbol);
     println!("Output file: {}", output_path.display());
@@ -65,7 +79,6 @@ async fn main() -> anyhow::Result<()> {
 
     let (mut write, mut read) = ws_stream.split();
 
-    // Use SDK's message types for correct subscription format
     let subscription = MarketSubscriptionMessage::new(
         SubscriptionType::Subscribe,
         vec![MarketSubscriptionStreams::new(
@@ -86,7 +99,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut message_count = 0;
     let start_time = tokio::time::Instant::now();
-    let max_duration = Duration::from_secs(30); // Run for 30 seconds
+    let max_duration = Duration::from_secs(30);
 
     println!("\nReceiving messages (30 seconds)...\n");
 
@@ -98,7 +111,6 @@ async fn main() -> anyhow::Result<()> {
                         message_count += 1;
                         let text_str = text.to_string();
 
-                        // Try to parse as MarketStreamMessage for structured output
                         if message_count <= 5 {
                             if let Ok(market_msg) = serde_json::from_str::<MarketStreamMessage>(&text_str) {
                                 println!("Message #{}: {:?}", message_count, market_msg);
@@ -112,7 +124,6 @@ async fn main() -> anyhow::Result<()> {
                             println!("... (logging to file)");
                         }
 
-                        // Write to file (NDJSON format)
                         let record = serde_json::json!({
                             "received_at": Utc::now().to_rfc3339(),
                             "message": serde_json::from_str::<Value>(&text_str).unwrap_or(Value::String(text_str))
@@ -147,7 +158,6 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    // Unsubscribe
     let unsubscribe = MarketSubscriptionMessage::new(
         SubscriptionType::Unsubscribe,
         vec![MarketSubscriptionStreams::new(

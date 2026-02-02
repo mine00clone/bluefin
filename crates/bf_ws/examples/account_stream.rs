@@ -1,18 +1,14 @@
 //! WebSocket Account Stream example using bluefin-pro SDK
 //!
 //! Tests authenticated account WebSocket:
-//! - Connect to wss://stream.api.sui-staging.bluefin.io/ws/account
+//! - Connect to wss://stream.api.../ws/account
 //! - Subscribe to account updates (orders, positions, trades)
 //! - Save raw messages
 //!
-//! Requires:
-//! - BLUEFIN_PRIVATE_KEY in .env (hex format, 64 chars)
-//! - BLUEFIN_ACCOUNT_ADDRESS in .env
-//!
 //! Usage:
-//!   cargo run --example account_stream -p bf_ws
+//!   cargo run --example account_stream -p bf_ws -- --run config/run/run_live.toml
 
-use bf_config::{AppConfig, Environment as BfEnvironment};
+use bf_config::{load_run_config, Environment as BfEnvironment};
 use bluefin_api::models::{
     AccountDataStream, AccountStreamMessage, AccountSubscriptionMessage, LoginRequest,
     SubscriptionType,
@@ -22,6 +18,7 @@ use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use hex::FromHex;
 use serde_json::Value;
+use std::env;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
@@ -38,34 +35,41 @@ fn to_sdk_env(env: &BfEnvironment) -> Environment {
     }
 }
 
+fn parse_run_arg() -> String {
+    let mut args = env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--run" {
+            if let Some(val) = args.next() {
+                return val;
+            }
+        }
+    }
+    "config/run/run_live.toml".to_string()
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     println!("=== Bluefin WebSocket Account Stream Test (SDK) ===\n");
 
-    let config = AppConfig::load("config")?;
-    let environment = to_sdk_env(&config.env.name);
+    let run_path = parse_run_arg();
+    let runtime = load_run_config(Path::new(&run_path))?;
+    let environment = to_sdk_env(&runtime.profile.env.name);
 
     // Load .env for secrets
     dotenvy::dotenv().ok();
-    let secrets = AppConfig::load_secrets()?;
+    let secrets = bf_config::AppConfig::load_secrets()?;
     let private_key_hex = secrets.private_key;
     let account_address = secrets
         .account_address
         .expect("BLUEFIN_ACCOUNT_ADDRESS not set in .env");
 
-    // Check key format
     if private_key_hex.starts_with("suiprivk") || private_key_hex.len() != 64 {
         println!("ERROR: Private key format issue.");
-        println!("\nFor testing on staging, use the SDK's test account:");
-        if let Some(test_keys) = environment.test_keys() {
-            println!("  BLUEFIN_PRIVATE_KEY={}", test_keys.private_key);
-            println!("  BLUEFIN_ACCOUNT_ADDRESS={}", test_keys.address);
-        }
         return Ok(());
     }
 
     println!("Account: {}", account_address);
-    println!("Environment: {:?}", config.env.name);
+    println!("Environment: {:?}", runtime.profile.env.name);
 
     // Step 1: Authenticate to get token
     println!("\n--- Authenticating ---");
@@ -80,8 +84,8 @@ async fn main() -> anyhow::Result<()> {
     println!("Token obtained (valid for {} seconds)", token_response.access_token_valid_for_seconds);
 
     // Create raw directory
-    let raw_dir = Path::new("data/raw/ws");
-    fs::create_dir_all(raw_dir)?;
+    let raw_dir = Path::new(&runtime.app.paths.raw_path).join("ws");
+    fs::create_dir_all(&raw_dir)?;
 
     let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
     let output_path = raw_dir.join(format!("account_stream_{}.ndjson", timestamp));
@@ -94,7 +98,6 @@ async fn main() -> anyhow::Result<()> {
     println!("Output file: {}", output_path.display());
     println!("Press Ctrl+C to stop\n");
 
-    // Build request with Authorization header
     let mut request = ws_url.into_client_request()?;
     request.headers_mut().insert(
         "Authorization",
@@ -125,7 +128,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut message_count = 0;
     let start_time = tokio::time::Instant::now();
-    let max_duration = Duration::from_secs(30); // Run for 30 seconds
+    let max_duration = Duration::from_secs(30);
 
     println!("\nReceiving messages (30 seconds)...\n");
 
@@ -137,7 +140,6 @@ async fn main() -> anyhow::Result<()> {
                         message_count += 1;
                         let text_str = text.to_string();
 
-                        // Try to parse as AccountStreamMessage
                         if message_count <= 5 {
                             if let Ok(account_msg) = serde_json::from_str::<AccountStreamMessage>(&text_str) {
                                 println!("Message #{}: {:?}", message_count, account_msg);
@@ -151,7 +153,6 @@ async fn main() -> anyhow::Result<()> {
                             println!("... (logging to file)");
                         }
 
-                        // Write to file (NDJSON format)
                         let record = serde_json::json!({
                             "received_at": Utc::now().to_rfc3339(),
                             "message": serde_json::from_str::<Value>(&text_str).unwrap_or(Value::String(text_str))
@@ -186,7 +187,6 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    // Unsubscribe
     let unsubscribe = AccountSubscriptionMessage::new(
         SubscriptionType::Unsubscribe,
         vec![

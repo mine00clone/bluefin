@@ -4,7 +4,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 use crate::{
-    Balance, CancelRequest, CoreError, Fill, Order, OrderRequest, OrderStatus,
+    Balance, CancelAck, CancelRequest, CoreError, Fill, Order, OrderRequest, OrderStatus,
     AccountEvent, MarketEvent,
 };
 
@@ -20,7 +20,7 @@ pub trait OrderExecutor: Send + Sync {
     fn create_orders(&self, requests: Vec<OrderRequest>) -> BoxFuture<'_, Result<Vec<Order>, CoreError>>;
 
     /// Cancel order(s)
-    fn cancel(&self, request: CancelRequest) -> BoxFuture<'_, Result<Vec<String>, CoreError>>;
+    fn cancel(&self, request: CancelRequest) -> BoxFuture<'_, Result<CancelAck, CoreError>>;
 }
 
 /// Order repository interface (persistence)

@@ -165,6 +165,17 @@ pub enum CancelRequest {
     AllForMarket { market: String },
 }
 
+/// Cancel acknowledgement returned by executor
+#[derive(Debug, Clone)]
+pub enum CancelAck {
+    /// Single order cancel accepted
+    Single { market: String, order_hash: String },
+    /// Batch cancel accepted
+    Batch { market: String, order_hashes: Vec<String> },
+    /// All orders for a market cancel accepted
+    AllForMarket { market: String },
+}
+
 // Display implementations for logging
 impl std::fmt::Display for TimeInForce {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

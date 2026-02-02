@@ -74,9 +74,13 @@ impl<R: OrderRepository> OrderManager<R> {
         if let Some(existing) = state.get(&order.order_hash) {
             if !self.is_valid_transition(existing.status, order.status) {
                 warn!(
-                    "Potentially invalid state transition for {}: {:?} -> {:?}",
+                    "Invalid state transition for {}: {:?} -> {:?}",
                     order.order_hash, existing.status, order.status
                 );
+                return Err(OmsError::InvalidTransition {
+                    from: existing.status.to_string(),
+                    to: order.status.to_string(),
+                });
             }
         }
 

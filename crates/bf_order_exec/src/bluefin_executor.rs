@@ -2,8 +2,8 @@
 
 use bf_auth::TokenManager;
 use bf_core::{
-    BoxFuture, CancelRequest, CoreError, Order, OrderExecutor, OrderRequest, OrderStatus,
-    OrderType, Side, TimeInForce,
+    BoxFuture, CancelAck, CancelRequest, CoreError, Order, OrderExecutor, OrderRequest,
+    OrderStatus, OrderType, Side, TimeInForce,
 };
 use bluefin_api::apis::configuration::Configuration;
 use bluefin_api::apis::trade_api::{cancel_orders, post_create_order};
@@ -34,18 +34,12 @@ pub struct BluefinOrderExecutor {
 
 impl BluefinOrderExecutor {
     /// Create a new BluefinOrderExecutor
-    pub fn new(token_manager: Arc<TokenManager>) -> Self {
+    pub fn new(token_manager: Arc<TokenManager>, leverage: u32) -> Self {
         Self {
             token_manager,
             ids_id: Arc::new(RwLock::new(None)),
-            leverage_e9: (10u64 * E9).to_string(), // Default 10x leverage
+            leverage_e9: ((leverage as u64) * E9).to_string(),
         }
-    }
-
-    /// Set the default leverage for orders (e9 format)
-    pub fn with_leverage(mut self, leverage: u32) -> Self {
-        self.leverage_e9 = ((leverage as u64) * E9).to_string();
-        self
     }
 
     /// Get the IDS ID from exchange config (cached)
@@ -128,6 +122,22 @@ impl BluefinOrderExecutor {
         &self,
         request: &OrderRequest,
     ) -> Result<CreateOrderRequest, CoreError> {
+        if request.size <= Decimal::ZERO {
+            return Err(CoreError::InvalidQuantity(
+                "Order size must be positive".to_string(),
+            ));
+        }
+        if request.order_type == OrderType::Limit && request.price.is_none() {
+            return Err(CoreError::InvalidPrice(
+                "Limit order requires price".to_string(),
+            ));
+        }
+        if request.post_only && request.time_in_force != TimeInForce::Gtc {
+            return Err(CoreError::InvalidRequest(
+                "post_only requires GTC time_in_force".to_string(),
+            ));
+        }
+
         let ids_id = self.get_ids_id().await?;
         let account_address = self.token_manager.account_address().to_string();
 
@@ -192,31 +202,48 @@ impl BluefinOrderExecutor {
 
         // Build Order from the response
         let signed_fields = &signed_request.signed_fields;
+        let side = match signed_fields.side {
+            OrderSide::Long => Side::Buy,
+            OrderSide::Short => Side::Sell,
+            OrderSide::Unspecified => {
+                return Err(CoreError::InvalidRequest(
+                    "OrderSide is unspecified".to_string(),
+                ));
+            }
+        };
+        let order_type = match signed_request.r#type {
+            SdkOrderType::Limit => OrderType::Limit,
+            SdkOrderType::Market => OrderType::Market,
+            _ => {
+                return Err(CoreError::InvalidRequest(
+                    "Unknown order type in signed request".to_string(),
+                ));
+            }
+        };
+        let time_in_force = signed_request
+            .time_in_force
+            .ok_or_else(|| CoreError::InvalidRequest("time_in_force is missing".to_string()))?;
+        let time_in_force = match time_in_force {
+            OrderTimeInForce::Gtt => TimeInForce::Gtc,
+            OrderTimeInForce::Ioc => TimeInForce::Ioc,
+            OrderTimeInForce::Fok => TimeInForce::Fok,
+            _ => {
+                return Err(CoreError::InvalidRequest(
+                    "Unknown time_in_force in signed request".to_string(),
+                ));
+            }
+        };
+
         Ok(Order {
             order_hash: response.order_hash,
             market: signed_fields.symbol.clone(),
-            side: match signed_fields.side {
-                OrderSide::Long => Side::Buy,
-                OrderSide::Short | OrderSide::Unspecified => Side::Sell,
-            },
-            order_type: match signed_request.r#type {
-                SdkOrderType::Limit => OrderType::Limit,
-                SdkOrderType::Market => OrderType::Market,
-                _ => OrderType::Limit, // Default for other types
-            },
+            side,
+            order_type,
             price: None, // Price in e9, we'd need to convert back
             size: Decimal::ZERO, // Size in e9, we'd need to convert back
             filled_size: Decimal::ZERO,
             status: OrderStatus::Open,
-            time_in_force: signed_request
-                .time_in_force
-                .map(|tif| match tif {
-                    OrderTimeInForce::Gtt => TimeInForce::Gtc, // GTT maps back to GTC
-                    OrderTimeInForce::Ioc => TimeInForce::Ioc,
-                    OrderTimeInForce::Fok => TimeInForce::Fok,
-                    _ => TimeInForce::Gtc,
-                })
-                .unwrap_or(TimeInForce::Gtc),
+            time_in_force,
             reduce_only: signed_request.reduce_only,
             post_only: signed_request.post_only.unwrap_or(false),
             client_order_id: signed_request.client_order_id,
@@ -230,7 +257,7 @@ impl BluefinOrderExecutor {
         &self,
         market: &str,
         order_hashes: Option<Vec<String>>,
-    ) -> Result<Vec<String>, CoreError> {
+    ) -> Result<(), CoreError> {
         let config = self.get_trade_config().await?;
 
         let request = CancelOrdersRequest {
@@ -243,8 +270,7 @@ impl BluefinOrderExecutor {
             .await
             .map_err(|e| CoreError::ApiError(format!("Cancel request failed: {}", e)))?;
 
-        // Return the order hashes that were submitted for cancellation
-        Ok(order_hashes.unwrap_or_default())
+        Ok(())
     }
 }
 
@@ -273,17 +299,22 @@ impl OrderExecutor for BluefinOrderExecutor {
         })
     }
 
-    fn cancel(&self, request: CancelRequest) -> BoxFuture<'_, Result<Vec<String>, CoreError>> {
+    fn cancel(&self, request: CancelRequest) -> BoxFuture<'_, Result<CancelAck, CoreError>> {
         Box::pin(async move {
             match request {
                 CancelRequest::Single { market, order_hash } => {
-                    self.execute_cancel(&market, Some(vec![order_hash])).await
+                    self.execute_cancel(&market, Some(vec![order_hash.clone()]))
+                        .await?;
+                    Ok(CancelAck::Single { market, order_hash })
                 }
                 CancelRequest::Batch { market, order_hashes } => {
-                    self.execute_cancel(&market, Some(order_hashes)).await
+                    self.execute_cancel(&market, Some(order_hashes.clone()))
+                        .await?;
+                    Ok(CancelAck::Batch { market, order_hashes })
                 }
                 CancelRequest::AllForMarket { market } => {
-                    self.execute_cancel(&market, None).await
+                    self.execute_cancel(&market, None).await?;
+                    Ok(CancelAck::AllForMarket { market })
                 }
             }
         })

@@ -8,7 +8,7 @@
 
 use bf_auth::TokenManager;
 use bf_config::AppConfig;
-use bf_core::{CancelRequest, CoreError, Order, OrderRequest};
+use bf_core::{CancelAck, CancelRequest, CoreError, Order, OrderRequest};
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::debug;
@@ -58,14 +58,16 @@ impl RestClient {
     }
 
     /// Cancel orders
-    pub async fn cancel_orders(&self, _request: CancelRequest) -> Result<Vec<String>, RestError> {
+    pub async fn cancel_orders(&self, _request: CancelRequest) -> Result<CancelAck, RestError> {
         debug!("Cancelling orders");
 
         // TODO: Implement using bluefin-pro SDK
         // PUT /api/v1/trade/orders/cancel
         // Supports: single hash, batch hashes, or all for market
 
-        Err(RestError::RequestFailed("Order cancellation not yet implemented - waiting for raw response analysis".to_string()))
+        Err(RestError::RequestFailed(
+            "Order cancellation not yet implemented - waiting for raw response analysis".to_string(),
+        ))
     }
 
     /// Get open orders
@@ -128,7 +130,7 @@ impl bf_core::OrderExecutor for RestClient {
         })
     }
 
-    fn cancel(&self, request: CancelRequest) -> bf_core::BoxFuture<'_, Result<Vec<String>, CoreError>> {
+    fn cancel(&self, request: CancelRequest) -> bf_core::BoxFuture<'_, Result<CancelAck, CoreError>> {
         Box::pin(async move {
             self.cancel_orders(request).await.map_err(Into::into)
         })

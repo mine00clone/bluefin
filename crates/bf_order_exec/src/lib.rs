@@ -10,10 +10,10 @@ mod bluefin_executor;
 
 pub use bluefin_executor::BluefinOrderExecutor;
 
-use bf_core::{CancelRequest, OrderExecutor, OrderRequest};
+use bf_core::{CancelAck, CancelRequest, OrderExecutor, OrderRequest};
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::{info, warn};
+use tracing::info;
 
 #[derive(Debug, Error)]
 pub enum ExecError {
@@ -34,8 +34,6 @@ pub enum ExecResult {
         order_hash: String,
         ack_time: chrono::DateTime<chrono::Utc>,
     },
-    /// Order was rejected immediately
-    Rejected { reason: String },
 }
 
 /// Cancel execution result
@@ -44,11 +42,9 @@ pub enum CancelResult {
     /// Cancel request was accepted (ACK received)
     /// Final confirmation will come via WebSocket
     Acked {
-        order_hashes: Vec<String>,
+        ack: CancelAck,
         ack_time: chrono::DateTime<chrono::Utc>,
     },
-    /// Cancel request failed
-    Failed { reason: String },
 }
 
 /// Order executor service
@@ -75,15 +71,16 @@ impl<E: OrderExecutor> OrderExecService<E> {
             request.price
         );
 
-        match self.executor.create_order(request).await {
-            Ok(order) => Ok(ExecResult::Acked {
-                order_hash: order.order_hash,
-                ack_time: chrono::Utc::now(),
-            }),
-            Err(e) => Ok(ExecResult::Rejected {
-                reason: e.to_string(),
-            }),
-        }
+        let order = self
+            .executor
+            .create_order(request)
+            .await
+            .map_err(|e| ExecError::CreateFailed(e.to_string()))?;
+
+        Ok(ExecResult::Acked {
+            order_hash: order.order_hash,
+            ack_time: chrono::Utc::now(),
+        })
     }
 
     /// Create multiple orders in batch
@@ -112,15 +109,16 @@ impl<E: OrderExecutor> OrderExecService<E> {
 
         info!("Cancelling {}", description);
 
-        match self.executor.cancel(request).await {
-            Ok(hashes) => Ok(CancelResult::Acked {
-                order_hashes: hashes,
-                ack_time: chrono::Utc::now(),
-            }),
-            Err(e) => Ok(CancelResult::Failed {
-                reason: e.to_string(),
-            }),
-        }
+        let ack = self
+            .executor
+            .cancel(request)
+            .await
+            .map_err(|e| ExecError::CancelFailed(e.to_string()))?;
+
+        Ok(CancelResult::Acked {
+            ack,
+            ack_time: chrono::Utc::now(),
+        })
     }
 
     /// Cancel a single order by hash
@@ -170,7 +168,9 @@ impl<E: OrderExecutor> OrderExecService<E> {
         }
 
         if request.post_only && request.time_in_force != bf_core::TimeInForce::Gtc {
-            warn!("Post-only orders typically use GTC time-in-force");
+            return Err(ExecError::ValidationError(
+                "post_only requires GTC time-in-force".to_string(),
+            ));
         }
 
         Ok(())

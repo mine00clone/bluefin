@@ -264,7 +264,9 @@ fn validate_plan_against_snapshot(
     snapshot: &bf_core::MarketSnapshot,
 ) -> Result<(), ConfigError> {
     if snapshot.markets.is_empty() {
-        return Ok(());
+        return Err(ConfigError::EnvError(
+            "markets snapshot is empty".to_string(),
+        ));
     }
     for order in &plan.orders {
         if snapshot.get(&order.market).is_none() {

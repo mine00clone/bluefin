@@ -77,8 +77,7 @@ let token = token_manager.get_token().await?;
 
 ```rust
 // 使用例
-let executor = BluefinOrderExecutor::new(token_manager.clone())
-    .with_leverage(10);
+let executor = BluefinOrderExecutor::new(token_manager.clone(), 10);
 
 // 注文作成
 let order_request = OrderRequest::limit(

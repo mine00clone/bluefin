@@ -15,6 +15,7 @@ pub mod market_meta;
 pub mod plan;
 pub mod redact;
 pub mod intent;
+pub mod confirm;
 
 pub use error::CoreError;
 pub use event::*;
@@ -26,3 +27,4 @@ pub use market_meta::*;
 pub use plan::*;
 pub use redact::*;
 pub use intent::*;
+pub use confirm::*;

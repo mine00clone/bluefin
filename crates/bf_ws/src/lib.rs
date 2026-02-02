@@ -182,8 +182,17 @@ async fn run_account_stream(
                 let value: Value =
                     serde_json::from_str(&text).unwrap_or(Value::String(text.to_string()));
                 save_raw_message_to(&raw_path, "account", &value).await?;
-                for evt in parse_account_events(&value) {
-                    let _ = sender.send(evt).await;
+                match parse_account_events(&value) {
+                    Ok(events) => {
+                        for evt in events {
+                            let _ = sender.send(evt).await;
+                        }
+                    }
+                    Err(e) => {
+                        error!("Account WS parse error: {}", e);
+                        save_raw_error_to(&raw_path, "account_parse_error", &value, &e.to_string())
+                            .await?;
+                    }
                 }
             }
             Ok(Message::Ping(data)) => {
@@ -245,6 +254,10 @@ async fn run_market_stream(
                 save_raw_message_to(&raw_path, "market", &value).await?;
                 if let Some(evt) = parse_market_event(&value) {
                     let _ = sender.send(evt).await;
+                } else {
+                    error!("Market WS parse error: unknown event");
+                    save_raw_error_to(&raw_path, "market_parse_error", &value, "unknown event")
+                        .await?;
                 }
             }
             Ok(Message::Ping(data)) => {
@@ -289,6 +302,32 @@ async fn save_raw_message_to(
     Ok(())
 }
 
+async fn save_raw_error_to(
+    raw_path: &str,
+    stream_type: &str,
+    message: &Value,
+    error: &str,
+) -> Result<(), WsError> {
+    let timestamp = Utc::now().format("%Y%m%d_%H%M%S_%3f");
+    let filename = format!("{}_{}.json", stream_type, timestamp);
+    let path = Path::new(raw_path).join("ws").join(&filename);
+
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+
+    let content = serde_json::json!({
+        "stream_type": stream_type,
+        "error": error,
+        "payload": message,
+        "received_at": Utc::now().to_rfc3339(),
+    });
+    let serialized = serde_json::to_string_pretty(&content)
+        .map_err(|e| WsError::ParseError(e.to_string()))?;
+    tokio::fs::write(&path, serialized).await?;
+    Ok(())
+}
+
 pub fn parse_market_event(value: &Value) -> Option<MarketEvent> {
     let event = value.get("event")?.as_str()?;
     let payload = value.get("payload")?.clone();
@@ -325,14 +364,12 @@ pub fn parse_market_event(value: &Value) -> Option<MarketEvent> {
     None
 }
 
-fn parse_account_events(value: &Value) -> Vec<AccountEvent> {
-    let parsed = match serde_json::from_value::<AccountStreamMessage>(value.clone()) {
-        Ok(msg) => msg,
-        Err(_) => return Vec::new(),
-    };
+fn parse_account_events(value: &Value) -> Result<Vec<AccountEvent>, WsError> {
+    let parsed = serde_json::from_value::<AccountStreamMessage>(value.clone())
+        .map_err(|e| WsError::ParseError(e.to_string()))?;
 
     let received_at = Utc::now();
-    match parsed {
+    let events = match parsed {
         AccountStreamMessage::AccountUpdate { payload, .. } => match payload {
             AccountStreamMessagePayload::AccountUpdate(update) => update
                 .assets
@@ -375,10 +412,8 @@ fn parse_account_events(value: &Value) -> Vec<AccountEvent> {
             _ => Vec::new(),
         },
         AccountStreamMessage::AccountPositionUpdate { payload, .. } => {
-            let payload_value = match serde_json::to_value(&payload) {
-                Ok(value) => value,
-                Err(_) => return Vec::new(),
-            };
+            let payload_value = serde_json::to_value(&payload)
+                .map_err(|e| WsError::ParseError(e.to_string()))?;
             let market = payload_value
                 .get("symbol")
                 .or_else(|| payload_value.get("market"))
@@ -392,7 +427,8 @@ fn parse_account_events(value: &Value) -> Vec<AccountEvent> {
             })]
         }
         _ => Vec::new(),
-    }
+    };
+    Ok(events)
 }
 
 fn order_from_active_update(

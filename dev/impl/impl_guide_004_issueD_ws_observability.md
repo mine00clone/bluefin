@@ -8,6 +8,5 @@
 - MODIFY: `crates/bf_ws/examples/*`（raw 保存の一貫性）
 
 ## Checklist
-- [ ] parse 失敗時に raw と error が保存される
-- [ ] 欠落・異常イベントがログに残る
-
+- [x] parse 失敗時に raw と error が保存される
+- [x] 欠落・異常イベントがログに残る

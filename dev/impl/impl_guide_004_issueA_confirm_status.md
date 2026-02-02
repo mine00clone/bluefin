@@ -10,7 +10,6 @@
 - MODIFY: `crates/bf_order_manager`（WSイベントから Confirm 状態へ変換）
 
 ## Checklist
-- [ ] ConfirmStatus enum が追加される
-- [ ] WS OrderUpdate を ConfirmStatus にマップできる
-- [ ] TimedOut を明示的に扱える
-
+- [x] ConfirmStatus enum が追加される
+- [x] WS OrderUpdate を ConfirmStatus にマップできる
+- [x] TimedOut を明示的に扱える

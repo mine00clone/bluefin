@@ -8,14 +8,16 @@
 
 mod bluefin_executor;
 mod normalize;
+mod confirm;
 
 pub use bluefin_executor::BluefinOrderExecutor;
 pub use normalize::{normalize_intent, NormalizationPolicy, PolicyMode, RoundingMode};
+pub use confirm::{wait_confirm, confirm_status_from_order_status};
 
 use bf_core::{CancelAck, CancelRequest, OrderExecutor, OrderRequest};
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Debug, Error)]
 pub enum ExecError {
@@ -94,6 +96,27 @@ impl<E: OrderExecutor> OrderExecService<E> {
         }
 
         results
+    }
+
+    /// Create order and wait for WS confirmation.
+    pub async fn create_order_with_confirm(
+        &self,
+        request: OrderRequest,
+        receiver: &mut tokio::sync::mpsc::Receiver<bf_core::AccountEvent>,
+        timeout: std::time::Duration,
+        fallback_enabled: bool,
+    ) -> Result<(ExecResult, bf_core::ConfirmStatus), ExecError> {
+        let ack = self.create_order(request).await?;
+        let status = wait_confirm(receiver, match &ack {
+            ExecResult::Acked { order_hash, .. } => order_hash,
+        }, timeout)
+        .await;
+
+        if status == bf_core::ConfirmStatus::TimedOut && fallback_enabled {
+            warn!("Confirm timed out; fallback_enabled=true but fallback not implemented");
+        }
+
+        Ok((ack, status))
     }
 
     /// Cancel order(s)

@@ -171,6 +171,8 @@ pub struct AppLoggingConfig {
 pub struct AppExecutionConfig {
     pub mode: String,
     pub requires_env: Option<String>,
+    pub fallback_enabled: bool,
+    pub confirm_timeout_secs: u64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -343,6 +345,16 @@ fn validate_plan_against_snapshot(
 
 /// Validate runtime configuration for safety and existence.
 pub fn validate_runtime_config(cfg: &RuntimeConfig) -> Result<(), ConfigError> {
+    if cfg.app.execution.mode.trim().is_empty() {
+        return Err(ConfigError::EnvError(
+            "execution.mode is required in app config".to_string(),
+        ));
+    }
+    if cfg.app.execution.confirm_timeout_secs == 0 {
+        return Err(ConfigError::EnvError(
+            "execution.confirm_timeout_secs must be > 0".to_string(),
+        ));
+    }
     // Live safety gate
     if cfg.run.mode.trading.eq_ignore_ascii_case("live") {
         if let Some(requirement) = &cfg.run.mode.requires_env {

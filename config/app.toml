@@ -15,6 +15,10 @@ json = false
 mode = "DryRun"
 # If set, required env var (e.g. ALLOW_LIVE_TRADING=YES) must match
 requires_env = "ALLOW_LIVE_TRADING=YES"
+# Fallback (openOrders etc.) opt-in only
+fallback_enabled = false
+# WS confirm wait timeout (seconds)
+confirm_timeout_secs = 10
 
 [normalization]
 # price/size: snap | reject

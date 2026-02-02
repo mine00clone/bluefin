@@ -10,7 +10,6 @@
 - MODIFY: `crates/bf_ws`（Confirm 用のイベント取得導線）
 
 ## Checklist
-- [ ] Normalize→Send→Confirm の順序が一貫する
-- [ ] Confirm は WS 由来のみ
-- [ ] ACK だけで成功扱いしない
-
+- [x] Normalize→Send→Confirm の順序が一貫する
+- [x] Confirm は WS 由来のみ
+- [x] ACK だけで成功扱いしない

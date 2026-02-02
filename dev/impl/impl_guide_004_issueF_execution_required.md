@@ -9,6 +9,5 @@
 - MODIFY: `config/run/README.md`（実行方針の追記）
 
 ## Checklist
-- [ ] [execution] 欠落で起動時に Err
-- [ ] README に方針が明記される
-
+- [x] [execution] 欠落で起動時に Err
+- [x] README に方針が明記される

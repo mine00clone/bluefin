@@ -10,7 +10,6 @@
 - MODIFY: `crates/bf_order_exec`（fallback 使用箇所）
 
 ## Checklist
-- [ ] fallback_enabled が config に追加される
-- [ ] false の場合は一切 fallback しない
-- [ ] true の場合のみ openOrders 等を使う
-
+- [x] fallback_enabled が config に追加される
+- [x] false の場合は一切 fallback しない
+- [ ] true の場合のみ openOrders 等を使う（raw capture と型確定後に実装）

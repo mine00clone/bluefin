@@ -2,12 +2,15 @@
 
 use anyhow::Result;
 use bf_auth::{BluefinEnvironment, TokenManager};
-use bf_core::{MarketEvent, Strategy, StrategyContext};
-use bf_order_exec::{normalize_intent, NormalizationPolicy, OrderExecService, PolicyMode, RoundingMode};
+use bf_core::{ConfirmStatus, MarketEvent, OrderRequest, Strategy, StrategyContext};
+use bf_order_exec::{
+    normalize_intent, NormalizationPolicy, OrderExecService, PolicyMode, RoundingMode,
+};
 use bf_strategies::ExampleStrategy;
-use bf_ws::{extract_last_price_e9, parse_market_event};
+use bf_ws::{extract_last_price_e9, parse_market_event, WsClient};
 use chrono::Utc;
 use rust_decimal::Decimal;
+use tokio::sync::mpsc;
 use tracing::{error, info, Level};
 use tracing_subscriber::FmtSubscriber;
 
@@ -94,6 +97,63 @@ async fn main() -> Result<()> {
             .map_err(|e| anyhow::anyhow!("Invalid max_deviation_bps: {}", e))?,
     };
 
+    let mut executor_handle = None;
+    let mut order_tx: Option<mpsc::Sender<OrderRequest>> = None;
+    if config.orders.allow_trading && runtime.run.mode.trading.eq_ignore_ascii_case("live") {
+        let env = to_sdk_env(&runtime.profile.env.name);
+        let token_manager = if matches!(env, BluefinEnvironment::Staging) {
+            TokenManager::with_test_keys(env)?
+        } else {
+            let account_address = secrets
+                .account_address
+                .clone()
+                .ok_or_else(|| anyhow::anyhow!("BLUEFIN_ACCOUNT_ADDRESS not set in .env"))?;
+            TokenManager::new(secrets.private_key.clone(), account_address, env)?
+        };
+        let ws_client = WsClient::new(config.clone());
+        let token = token_manager.get_token().await?;
+        let mut account_rx = ws_client.connect_account(&token).await?;
+        let executor = bf_order_exec::BluefinOrderExecutor::new(
+            std::sync::Arc::new(token_manager),
+            config.orders.default_leverage,
+        );
+        let service = OrderExecService::new(std::sync::Arc::new(executor));
+        let fallback_enabled = runtime.app.execution.fallback_enabled;
+        let confirm_timeout = std::time::Duration::from_secs(
+            runtime.app.execution.confirm_timeout_secs,
+        );
+        let (tx, mut rx) = mpsc::channel::<OrderRequest>(32);
+        order_tx = Some(tx);
+
+        executor_handle = Some(tokio::spawn(async move {
+            while let Some(order) = rx.recv().await {
+                let (ack, status) = service
+                    .create_order_with_confirm(
+                        order,
+                        &mut account_rx,
+                        confirm_timeout,
+                        fallback_enabled,
+                    )
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Order execution failed: {}", e))?;
+                info!("Order ACK: {:?}", ack);
+                match status {
+                    ConfirmStatus::Active
+                    | ConfirmStatus::PartiallyFilled
+                    | ConfirmStatus::Filled => {
+                        info!("Order confirm status: {:?}", status);
+                    }
+                    ConfirmStatus::Canceled
+                    | ConfirmStatus::Expired
+                    | ConfirmStatus::TimedOut => {
+                        return Err(anyhow::anyhow!("Order confirm failed: {:?}", status));
+                    }
+                }
+            }
+            Ok::<(), anyhow::Error>(())
+        }));
+    }
+
     for intent in intents {
         let normalized = normalize_intent(
             &intent,
@@ -105,33 +165,27 @@ async fn main() -> Result<()> {
             "Normalized order: {} {} {} @ {:?}",
             normalized.market, normalized.side, normalized.size, normalized.price
         );
-        if config.orders.allow_trading {
-            if runtime.run.mode.trading.eq_ignore_ascii_case("live") {
-                let env = to_sdk_env(&runtime.profile.env.name);
-                let token_manager = if matches!(env, BluefinEnvironment::Staging) {
-                    TokenManager::with_test_keys(env)?
-                } else {
-                    let account_address = secrets
-                        .account_address
-                        .clone()
-                        .ok_or_else(|| anyhow::anyhow!("BLUEFIN_ACCOUNT_ADDRESS not set in .env"))?;
-                    TokenManager::new(secrets.private_key.clone(), account_address, env)?
-                };
-                let executor = bf_order_exec::BluefinOrderExecutor::new(
-                    std::sync::Arc::new(token_manager),
-                    config.orders.default_leverage,
-                );
-                let service = OrderExecService::new(std::sync::Arc::new(executor));
-                let ack = service.create_order(normalized).await?;
-                info!("Order ACK: {:?}", ack);
-            } else {
-                info!(
-                    "Trading enabled but mode is {}; execution skipped",
-                    runtime.run.mode.trading
-                );
+        if let Some(tx) = &order_tx {
+            if let Err(e) = tx.send(normalized).await {
+                error!("engine->executor transfer failed: {}", e);
+                return Err(anyhow::anyhow!("engine->executor transfer failed: {}", e));
             }
+        } else if config.orders.allow_trading {
+            info!(
+                "Trading enabled but mode is {}; execution skipped",
+                runtime.run.mode.trading
+            );
         } else {
             info!("Trading disabled by config.orders.allow_trading=false");
+        }
+    }
+
+    drop(order_tx);
+    if let Some(handle) = executor_handle {
+        match handle.await {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => return Err(e),
+            Err(e) => return Err(anyhow::anyhow!("executor task failed: {}", e)),
         }
     }
 

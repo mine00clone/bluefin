@@ -203,6 +203,9 @@ async fn main() -> anyhow::Result<()> {
             return Err(anyhow::anyhow!("Order size below minimum"));
         }
 
+        let signed_at_millis = Utc::now().timestamp_millis();
+        let expires_at_millis = signed_at_millis + 6 * 60 * 1000;
+
         let signed_fields = CreateOrderRequestSignedFields {
             symbol: market.clone(),
             account_address: account_address.clone(),
@@ -213,8 +216,8 @@ async fn main() -> anyhow::Result<()> {
             is_isolated: false,
             salt: random::<u64>().to_string(),
             ids_id: contracts_config.ids_id.clone(),
-            expires_at_millis: (Utc::now().timestamp_millis() + 6 * 60 * 1000) as i64,
-            signed_at_millis: Utc::now().timestamp_millis(),
+            expires_at_millis: expires_at_millis as i64,
+            signed_at_millis,
         };
 
         let order_request = CreateOrderRequest {

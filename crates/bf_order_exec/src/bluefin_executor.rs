@@ -35,6 +35,7 @@ pub struct BluefinOrderExecutor {
 impl BluefinOrderExecutor {
     /// Create a new BluefinOrderExecutor
     pub fn new(token_manager: Arc<TokenManager>, leverage: u32) -> Self {
+        info!("Using leverage (e9): {}", (leverage as u64) * E9);
         Self {
             token_manager,
             ids_id: Arc::new(RwLock::new(None)),

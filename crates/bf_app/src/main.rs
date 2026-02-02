@@ -1,7 +1,7 @@
 //! Main application binary for Bluefin trading bot.
 
 use anyhow::Result;
-use tracing::{info, Level};
+use tracing::{error, info, Level};
 use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]
@@ -44,6 +44,8 @@ async fn main() -> Result<()> {
     // 1. WS account stream -> OrderManager, BalanceManager updates
     // 2. WS market stream -> Strategy updates
     // 3. Periodic REST reconciliation
+    // NOTE: If OrderManager::apply_update returns Err (invalid transition),
+    //       stop trading and trigger resync/reconcile before continuing.
 
     info!("Bot initialization complete - ready for trading");
     info!("Markets: {:?}", config.markets.symbols);
@@ -53,4 +55,10 @@ async fn main() -> Result<()> {
     info!("Shutting down...");
 
     Ok(())
+}
+
+#[allow(dead_code)]
+fn halt_on_oms_error(e: &bf_order_manager::OmsError) -> anyhow::Error {
+    error!("OMS error detected; halting for resync: {}", e);
+    anyhow::anyhow!("OMS error detected; halt trading: {}", e)
 }

@@ -338,9 +338,8 @@ fn parse_account_events(value: &Value) -> Vec<AccountEvent> {
                 .assets
                 .iter()
                 .filter_map(|asset| {
-                    let total = parse_e9_decimal(&asset.quantity_e9)?;
                     let available = parse_e9_decimal(&asset.max_withdraw_quantity_e9)?;
-                    let balance = Balance::new(&asset.symbol, total, available);
+                    let balance = Balance::new(&asset.symbol, available, available);
                     Some(AccountEvent::BalanceUpdate(BalanceUpdateEvent { balance, received_at }))
                 })
                 .collect(),
